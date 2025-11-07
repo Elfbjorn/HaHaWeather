@@ -114,62 +114,76 @@ async function fetchNWSForecast(lat, lon) {
  * Fetch NWS active alerts and construct FULL rendered URL
  * Requires: forecastZone from fetchNWSForecast() and location name for fallback
  */
+/**
+ * Fetch NWS active alerts and construct FULL rendered URL
+ */
 async function fetchNWSAlerts(lat, lon, forecastZone, locationName = '') {
-    const url = `https://api.weather.gov/alerts/active?point=${lat},${lon}`;
-    const resp = await fetchWithTimeout(url, { headers: { 'User-Agent': 'WeatherCompareApp' } });
-    if (!resp.ok) return [];
+    try {
+        const url = `https://api.weather.gov/alerts/active?point=${lat},${lon}`;
+        const response = await fetchWithTimeout(url, {
+            headers: { 'User-Agent': 'WeatherCompareApp' }
+        });
 
-    const data = await resp.json();
+        if (!response.ok) return [];
 
-    return (data.features || []).map(f => {
-        const p = f.properties || {};
+        const data = await response.json();
+        const alerts = data.features || [];
 
-        // Zones
-        const affected = Array.isArray(p.affectedZones) ? p.affectedZones : [];
-        const zones = affected.map(z => (z || '').split('/').pop()).filter(Boolean);
-        // Prefer the zone that matches the point's forecastZone; else first available; else point zone
-        const warnzone = (zones.find(z => z === forecastZone) || zones[0] || forecastZone || '').trim();
+        return alerts.map(alert => {
+            const p = alert.properties || {};
 
-        // County (UGC) (e.g., MDC027)
-	const ugc = p.geocode?.UGC;
-	const warncounty = (Array.isArray(ugc) && ugc.length > 0) ? ugc[0].trim() : "";
+            // ---- Forecast Zone (MDZ506, etc.)
+            const affected = Array.isArray(p.affectedZones) ? p.affectedZones : [];
+            const zoneCodes = affected.map(z => z.split('/').pop()).filter(Boolean);
+            const warnzone =
+                (zoneCodes.find(z => z === forecastZone) ||
+                 zoneCodes[0] ||
+                 forecastZone ||
+                 "").trim();
 
+            // ---- County UGC Code (MDC027, etc.)
+            const ugcList = p.geocode?.UGC;
+            const warncounty =
+                (Array.isArray(ugcList) && ugcList.length > 0)
+                    ? ugcList[0].trim()
+                    : "";
 
+            // ---- Fire weather zone (use same as warnzone unless later enhanced)
+            const firewxzone = warnzone;
 
+            // ---- Local place (keep EXACT areaDesc — do NOT split)
+            const local_place1_raw = (p.areaDesc || locationName || "").trim();
+            const local_place1 = encodeURIComponent(local_place1_raw);
 
-        // Fire weather zone: if the alert lists any fire zones separately you could parse them;
-        // in most cases using the same zone is acceptable.
-        const firewxzone = warnzone;
+            // ---- Product/Event (e.g., "Frost Advisory")
+            const product1 = encodeURIComponent(p.event || "");
 
-        // Place label
-        const local_place1_raw = (p.areaDesc || locationName || '').trim();
-	const local_place1 = encodeURIComponent(p.areaDesc || locationName || "");
+            // ---- Coordinates (rounded is fine)
+            const latStr = Number(lat).toFixed(4);
+            const lonStr = Number(lon).toFixed(4);
 
+            // ---- Final, correct human-facing URL (the one you actually want)
+            const renderedUrl =
+                `https://forecast.weather.gov/showsigwx.php?` +
+                `warnzone=${warnzone}` +
+                (warncounty ? `&warncounty=${warncounty}` : "") +
+                `&firewxzone=${firewxzone}` +
+                (local_place1 ? `&local_place1=${local_place1}` : "") +
+                (product1 ? `&product1=${product1}` : "") +
+                `&lat=${latStr}&lon=${lonStr}`;
 
-        // Product / event (e.g., "Frost Advisory")
-        const product1 = encodeURIComponent(p.event || '');
-
-        // Coordinates (rounded for URL cleanliness)
-        const latStr = Number(lat).toFixed(4);
-        const lonStr = Number(lon).toFixed(4);
-
-        // FINAL human-facing NWS page
-        const renderedUrl =
-            `https://forecast.weather.gov/showsigwx.php?` +
-            `warnzone=${warnzone}` +
-            (warncounty ? `&warncounty=${warncounty}` : '') +
-            (firewxzone ? `&firewxzone=${firewxzone}` : '') +
-            (local_place1 ? `&local_place1=${local_place1}` : '') +
-            (product1 ? `&product1=${product1}` : '') +
-            `&lat=${latStr}&lon=${lonStr}`;
-
-        return {
-            headline: p.headline,
-            severity: p.severity,
-            url: renderedUrl,
-            start: p.onset || p.effective || p.sent || null,
-            end: p.ends || p.expires || null
-        };
-    });
+            return {
+                headline: p.headline,
+                severity: p.severity,
+                url: renderedUrl,
+                event: p.event,
+                onset: p.onset,
+                ends: p.ends
+            };
+        });
+    } catch (error) {
+        console.warn("Alert fetch failed", error);
+        return [];
+    }
 }
 
