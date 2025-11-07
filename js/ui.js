@@ -136,7 +136,10 @@ function renderWeatherCell(dayData, period) {
 
 function renderWeatherTable(locationsInput) {
   try {
-    const container = document.getElementById('weather-table-container');
+	const container = document.getElementById('forecast-container') 
+                || document.getElementById('weather-table-container') 
+                || document.querySelector('.forecast-container')
+                || document.querySelector('#forecast-table-container');
     if (!container) {
       console.error("[UI] renderWeatherTable: container #weather-table-container not found.");
       return;
