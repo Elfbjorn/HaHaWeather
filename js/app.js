@@ -3,6 +3,11 @@ window.appState = {
     maxLocations: 3
 };
 
+function getLocationInputElement(index) {
+  // Convert app index to actual DOM id
+  return document.getElementById(`location-${index + 1}`);
+}
+
 async function initApp() {
     console.log("Initializing Weather Compare App...");
     initTheme();
@@ -33,34 +38,37 @@ async function initApp() {
 
 async function updateLocation(index) {
   try {
-    const query = locationInputs[index].value.trim();
+    const inputEl = getLocationInputElement(index);
+    const query = inputEl.value.trim();
+    if (!query) return;
+
+    console.log(`[APP] updateLocation(${index}) start -> "${query}"`);
+    showLoading();
+
+    // Only geocode here
     const geo = await geocodeLocation(query);
 
-    console.log("[APP] geocoded:", geo);
-
-    // Pass ONLY the geocoded info.
-    const loc = {
+    // Pass minimal info; setLocation handles forecast + alerts
+    await setLocation(index, {
       lat: geo.lat,
       lon: geo.lon,
       label: geo.label
-    };
-
-    await setLocation(index, loc);
+    });
 
   } catch (err) {
-    console.error("[APP] updateLocation ERROR:", err);
+    console.error(`[APP] updateLocation(${index}) ERROR:`, err);
+  } finally {
     hideLoading();
+    console.log(`[APP] updateLocation(${index}) end`);
   }
 }
-
 
 async function setLocation(index, locationInfo) {
   console.log(`[APP] setLocation(${index}) start for`, locationInfo);
 
-  // 1) Fetch forecast package
+  // Fetch NWS forecast package
   const forecastData = await fetchNWSForecast(locationInfo.lat, locationInfo.lon);
 
-  // Extract the periods array
   const periods =
     forecastData.forecast &&
     forecastData.forecast.properties &&
@@ -68,18 +76,18 @@ async function setLocation(index, locationInfo) {
       ? forecastData.forecast.properties.periods
       : [];
 
-  // Extract zone for alerts
-  const forecastZone = forecastData.point &&
-                      forecastData.point.properties &&
-                      forecastData.point.properties.forecastZone;
+  const forecastZone =
+    forecastData.point &&
+    forecastData.point.properties &&
+    forecastData.point.properties.forecastZone;
 
-  // 2) Fetch alerts
+  // Fetch alerts with zone + county fallback
   const alerts = await fetchNWSAlerts(locationInfo.lat, locationInfo.lon, { pointJson: forecastData.point });
 
-  // 3) Compute daily aggregates (unchanged)
+  // Compute daily aggregates
   const dailyData = getDailyRealFeelRange(periods);
 
-  // 4) Store final enriched object
+  // Store enriched location object
   appState.locations[index] = {
     ...locationInfo,
     city: forecastData.city,
@@ -92,10 +100,11 @@ async function setLocation(index, locationInfo) {
   };
 
   console.log(`[APP] setLocation(${index}) stored location, rendering table`);
-  renderWeatherTable(appState.locations.filter(l => l !== null));
+  renderWeatherTable(appState.locations.filter(Boolean));
   saveLocationsToCookie();
   console.log(`[APP] setLocation(${index}) done`);
 }
+
 
 
 // ---------------- COOKIE STORAGE ----------------

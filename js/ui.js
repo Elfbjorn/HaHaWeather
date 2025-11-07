@@ -44,10 +44,16 @@ function renderWeatherTable(locationsData) {
                 const period = location.forecast.find(p => p.startTime.startsWith(dateStr));
 
                 // Check alerts for this specific day
-                const alertForDay = (location.alerts || []).find(a => alertAppliesOnDate(a, dateStr));
-                const cellAlert = alertForDay
-                    ? `<a class="alert-icon" href="${alertForDay.url}" target="_blank" rel="noopener" title="${alertForDay.headline}">⚠️</a>`
-                    : '';
+		const alertForDay = (location.alerts || []).find(a => alertAppliesOnDate(a, dateStr));
+
+		const cellAlert = alertForDay
+    			? `<a class="alert-icon"
+    			      href="${alertForDay.properties?.link || alertForDay.properties?.url}"
+    			      target="_blank" rel="noopener"
+    			      title="${alertForDay.properties?.headline || alertForDay.properties?.event}">
+    			      ⚠️
+    			   </a>`
+    		: '';
 
                 tableHTML += `<td>${cellAlert}${renderWeatherCell(day, period)}</td>`;
             } else {
