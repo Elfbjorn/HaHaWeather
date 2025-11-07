@@ -1,202 +1,202 @@
-var API_TIMEOUT = 5000;
+/* ===========================
+   api.js — Browser-friendly NWS client
+   No modules. No build step. No OpenWeather.
+   =========================== */
 
-/**
- * Fetch with timeout
- */
-function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+(function () {
+  // --- Config ---
+  var DEFAULT_TIMEOUT_MS = 15000;
 
-  const headers = Object.assign(
-    {},
-    { "Accept": "application/geo+json" }, // required for NWS
-    options.headers || {}
-  );
+  // --- Utilities ---
+  function withTimeout(promise, ms) {
+    var controller = new AbortController();
+    var t = setTimeout(function () { controller.abort(); }, ms);
+    return {
+      signal: controller.signal,
+      finalize: function () { clearTimeout(t); }
+    };
+  }
 
-  const finalOptions = Object.assign({}, options, {
-    headers,
-    signal: controller.signal
-  });
+  async function fetchJSON(url, options, timeoutMs) {
+    options = options || {};
+    timeoutMs = typeof timeoutMs === "number" ? timeoutMs : DEFAULT_TIMEOUT_MS;
 
-  return fetch(url, finalOptions)
-    .finally(() => clearTimeout(timeoutId));
-}
-
-
-
-/**
- * IP-based default location
- */
-async function getUserLocation() {
+    // Merge headers; ensure Accept for NWS/GeoJSON.
+    var hdrs = Object.assign({ "Accept": "application/geo+json" }, options.headers || {});
+    var to = withTimeout(null, timeoutMs);
     try {
-        const response = await fetchWithTimeout('http://ip-api.com/json/');
-        if (!response.ok) throw new Error('IP-API failed');
-        const data = await response.json();
-
-        return {
-            name: `${data.city}, ${data.regionName}`,
-            lat: data.lat,
-            lon: data.lon,
-            state: data.regionName
-        };
-    } catch (error) {
-        return {
-            name: 'Chicago, IL',
-            lat: 41.8781,
-            lon: -87.6298,
-            state: 'Illinois'
-        };
+      var resp = await fetch(url, Object.assign({}, options, { headers: hdrs, signal: to.signal }));
+      if (!resp.ok) {
+        // Surface status for easier debugging
+        var text = "";
+        try { text = await resp.text(); } catch (_) {}
+        console.error("HTTP error", resp.status, url, text);
+        throw new Error("Request failed: " + resp.status + " " + url);
+      }
+      // NWS often returns geojson; Nominatim returns JSON.
+      // If content-type is not JSON, try text->JSON anyway for proxies.
+      var ct = resp.headers.get("content-type") || "";
+      if (ct.includes("json")) return await resp.json();
+      try { return JSON.parse(await resp.text()); }
+      catch (e) { throw new Error("Non-JSON response at " + url); }
+    } finally {
+      to.finalize();
     }
-}
+  }
 
-function isZipCode(input) {
-    return /^\d{5}(-\d{4})?$/.test(input.trim());
-}
+  // --- Geocoding (ZIP or city/state) via Nominatim (no API key needed) ---
+  // Returns: { lat:number, lon:number, label:string }
+  async function geocodeLocation(query) {
+    if (!query || typeof query !== "string") throw new Error("Missing location query");
+    var q = query.trim();
+    var params = new URLSearchParams({
+      format: "json",
+      addressdetails: "1",
+      limit: "1",
+      countrycodes: "us",
+      q: q
+    });
+    var url = "https://nominatim.openstreetmap.org/search?" + params.toString();
 
-/**
- * ZIP → lat/lon
- */
-async function geocodeZipCode(zip) {
-    const response = await fetchWithTimeout(`https://api.zippopotam.us/us/${zip}`);
-    if (!response.ok) throw new Error(`Invalid ZIP code: ${zip}`);
-    const data = await response.json();
-    const place = data.places[0];
+    // Nominatim usage policy: include Referer automatically from browser
+    var data = await fetchJSON(url, { headers: { "Accept": "application/json" } }, 12000);
+    if (!Array.isArray(data) || data.length === 0) {
+      throw new Error("Location not found for: " + q);
+    }
+    var hit = data[0];
+    var lat = parseFloat(hit.lat);
+    var lon = parseFloat(hit.lon);
+
+    // Construct a readable label (City, ST or display_name fallback)
+    var adr = hit.address || {};
+    var cityLike = adr.city || adr.town || adr.village || adr.hamlet || adr.county || "";
+    var state = adr.state || adr.state_code || "";
+    var label = (cityLike && state) ? (cityLike + ", " + (adr.state_code || state)) : (hit.display_name || q);
+
+    return { lat: lat, lon: lon, label: label };
+  }
+
+  // --- NWS Points: lat/lon → grid + forecast URLs + zones + relativeLocation ---
+  // Returns raw NWS points JSON
+  async function getNwsPoint(lat, lon) {
+    var url = "https://api.weather.gov/points/" + lat + "," + lon;
+    return await fetchJSON(url, {}, 12000);
+  }
+
+  // --- Helpers to extract codes/labels from point data ---
+  function extractZoneCodeFromUrl(zoneUrl) {
+    // e.g., https://api.weather.gov/zones/forecast/MDZ014 -> MDZ014
+    if (!zoneUrl) return null;
+    try {
+      var parts = zoneUrl.split("/");
+      return parts[parts.length - 1] || null;
+    } catch (_) { return null; }
+  }
+
+  function extractCityState(pointJson) {
+    try {
+      var rel = pointJson.properties.relativeLocation.properties;
+      return {
+        city: rel.city || "",
+        state: rel.state || ""
+      };
+    } catch (_) {
+      return { city: "", state: "" };
+    }
+  }
+
+  // --- Forecast (grid-level) ---
+  // Returns { forecast, hourly, city, state }
+  async function getNwsForecast(lat, lon) {
+    var point = await getNwsPoint(lat, lon);
+
+    var fUrl = point.properties && point.properties.forecast;
+    var hUrl = point.properties && point.properties.forecastHourly;
+
+    if (!fUrl) throw new Error("NWS 'forecast' URL missing for these coordinates");
+    if (!hUrl) console.warn("NWS 'forecastHourly' URL missing; continuing with daily forecast only");
+
+    var cityState = extractCityState(point);
+    var forecast = await fetchJSON(fUrl, {}, 12000);
+    var hourly = null;
+    if (hUrl) {
+      try { hourly = await fetchJSON(hUrl, {}, 12000); }
+      catch (e) { console.warn("Hourly forecast fetch failed:", e.message); }
+    }
 
     return {
-        name: `${place['place name']}, ${place['state abbreviation']}`,
-        lat: parseFloat(place.latitude),
-        lon: parseFloat(place.longitude)
+      forecast: forecast,           // NWS daily periods
+      hourly: hourly,               // NWS hourly periods (may be null)
+      city: cityState.city,
+      state: cityState.state,
+      point: point                  // hand back point for downstream (alerts)
     };
-}
+  }
 
-/**
- * City → lat/lon (OpenWeather geocoder)
- */
-async function geocodeCityName(cityName) {
-    const API_KEY = "f00c6306f9ff9e67a6562b12f1d91f82";
+  // --- Alerts: zone-first with county fallback ---
+  // Returns array of GeoJSON Feature objects (may be empty)
+  async function getNwsAlerts(lat, lon, options) {
+    options = options || {};
+    var includeCountyFallback = (options.includeCountyFallback !== false); // default true
 
-    let city = cityName.trim();
-    let state = null;
+    var point = options.pointJson || await getNwsPoint(lat, lon);
+    var fxZoneCode = extractZoneCodeFromUrl(point.properties && point.properties.forecastZone);
+    var countyZoneCode = extractZoneCodeFromUrl(point.properties && point.properties.county);
 
-    // Detect "City, ST" format
-    const match = city.match(/^(.+?),\s*([A-Za-z]{2})$/);
-    if (match) {
-        city = match[1].trim();
-        state = match[2].toUpperCase();
+    async function fetchAlertsForZoneCode(zoneCode) {
+      if (!zoneCode) return [];
+      var url = "https://api.weather.gov/alerts/active?zone=" + encodeURIComponent(zoneCode);
+      var geo = await fetchJSON(url, {}, 12000);
+      return Array.isArray(geo.features) ? geo.features : [];
     }
 
-    // Build query
-    // If we have state:   q=City,ST,US
-    // If not:             q=City,US (still strongly biased to U.S.)
-    const q = state ? `${city},${state},US` : `${city},US`;
+    // 1) Try forecast zone
+    var features = await fetchAlertsForZoneCode(fxZoneCode);
 
-    const url = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(q)}&limit=5&appid=${API_KEY}`;
-    const response = await fetchWithTimeout(url);
-    const data = await response.json();
+    // 2) Fallback to county zone if none
+    if (includeCountyFallback && (!features || features.length === 0)) {
+      var countyFeatures = await fetchAlertsForZoneCode(countyZoneCode);
+      if (countyFeatures && countyFeatures.length) {
+        features = countyFeatures;
+      }
+    }
 
-    if (!data.length) throw new Error(`Unable to find location: ${cityName}`);
+    return features || [];
+  }
 
-    const r = data[0];
-    return {
-        name: `${r.name}, ${r.state || 'US'}`,
-        lat: r.lat,
-        lon: r.lon,
-        state: r.state
-    };
-}
-
-
-async function geocodeLocation(locationName) {
-  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(locationName)}`;
-  const resp = await fetch(url);
-  const data = await resp.json();
-  if (!data || data.length === 0) throw new Error("Location not found");
-  return {
-    lat: parseFloat(data[0].lat),
-    lon: parseFloat(data[0].lon)
+  // --- Public API (attach both as globals and under window.WeatherAPI) ---
+  // These names match common usage in your app (based on your logs)
+  window.fetchWithTimeout = function (url, options, timeoutMs) {
+    // Thin wrapper using fetchJSON to keep a consistent interface
+    // but preserve original name used across your code.
+    return fetchJSON(url, options, timeoutMs);
   };
-}
 
-/**
- * Fetch forecast + zone (CRITICAL FIX)
- */
-async function fetchNWSForecast(lat, lon) {
-    const pointsResponse = await fetchWithTimeout(`https://api.weather.gov/points/${lat},${lon}`, {
-        headers: { 'User-Agent': 'WeatherCompareApp' }
-    });
-    const pointsData = await pointsResponse.json();
+  window.geocodeLocation = geocodeLocation;
+  window.getNwsPoint = getNwsPoint;
+  window.getNwsForecast = getNwsForecast;
+  window.getNwsAlerts = getNwsAlerts;
 
-    const forecastUrl = pointsData.properties.forecast;
-    const forecastZone = pointsData.properties.forecastZone.split('/').pop();
-
-    const forecastResponse = await fetchWithTimeout(forecastUrl, {
-        headers: { 'User-Agent': 'WeatherCompareApp' }
-    });
-    const forecastData = await forecastResponse.json();
-
+  // Optional: single call to get everything needed for a location
+  window.getNwsPackage = async function (locationQuery) {
+    var geo = await geocodeLocation(locationQuery);
+    var fc = await getNwsForecast(geo.lat, geo.lon);
+    var alerts = await getNwsAlerts(geo.lat, geo.lon, { pointJson: fc.point, includeCountyFallback: true });
     return {
-        periods: forecastData.properties.periods,
-        forecastZone
+      query: locationQuery,
+      label: geo.label,
+      lat: geo.lat,
+      lon: geo.lon,
+      city: fc.city,
+      state: fc.state,
+      forecast: fc.forecast,
+      hourly: fc.hourly,
+      alerts: alerts
     };
-}
+  };
 
-/**
- * Fetch alerts using the correct zone (CRITICAL FIX)
- */
-async function fetchNWSAlerts(lat, lon) {
-    try {
-	// 1) Get zone + county info from Points API (always reliable)
-	const pointsResp = await fetchWithTimeout(`https://api.weather.gov/points/${lat},${lon}`, {
-	    headers: { 'User-Agent': 'WeatherCompareApp' }
-	});
-	const pointsData = await pointsResp.json();
-
-	const forecastZone = pointsData.properties?.forecastZone?.split('/').pop() || "";
-	const countyCode = pointsData.properties?.county?.split('/').pop() || "";
-	const firewxzone = pointsData.properties?.fireWeatherZone?.split('/').pop() || forecastZone;
-
-	// 2) Get active alerts for the point
-	const alertsResp = await fetchWithTimeout(
-	    `https://api.weather.gov/alerts/active?point=${lat},${lon}`,
-	    { headers: { 'User-Agent': 'WeatherCompareApp' } }
-	);
-	if (!alertsResp.ok) return [];
-	const alertsData = await alertsResp.json();
-
-	return (alertsData.features || []).map(alert => {
-	    const p = alert.properties || {};
-
-	    const local_place1_raw = (p.areaDesc || "").trim();
-	    const local_place1 = encodeURIComponent(local_place1_raw);
-	    const product1 = encodeURIComponent(p.event || "");
-
-	    const latStr = Number(lat).toFixed(4);
-	    const lonStr = Number(lon).toFixed(4);
-
-	    const url =
-		`https://forecast.weather.gov/showsigwx.php?` +
-		`warnzone=${forecastZone}` +
-		`&warncounty=${countyCode}` +
-		`&firewxzone=${firewxzone}` +
-		(local_place1 ? `&local_place1=${local_place1}` : "") +
-		(product1 ? `&product1=${product1}` : "") +
-		`&lat=${latStr}&lon=${lonStr}`;
-
-		return {
-		    headline: p.headline,
-		    severity: p.severity,
-		    url,
-		    event: p.event,
-		    
-		    // ✅ Add these two lines:
-		    start: new Date(p.onset || p.effective || p.sent || Date.now()),
-		    end: new Date(p.ends || p.expires || p.onset || Date.now())
-		};
-
-	});
-    } catch (err) {
-	console.warn("Failed to fetch alerts:", err);
-	return [];
-    }
-}
-
+  // Helpful console banner so you know this file loaded
+  try {
+    console.debug("[api.js] NWS client initialized (browser mode).");
+  } catch (_) {}
+})();
