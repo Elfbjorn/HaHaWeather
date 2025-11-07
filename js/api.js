@@ -195,23 +195,36 @@ async function fetchNWSAlerts(lat, lon) {
 
         const data = await response.json();
 
-        return data.features.map(feature => {
-            // Example affectedZones entry:
-            // "https://api.weather.gov/zones/forecast/MDZ506"
-            const zones = feature.properties.affectedZones || [];
-            const primaryZone = zones.length > 0 ? zones[0].split('/').pop() : null;
+	return data.features.map(feature => {
+	    // Extract a usable forecast zone like "MDZ506"
+	    const zones = feature.properties.affectedZones || [];
+	    const zone = zones
+	        .map(z => z.split('/').pop())
+	        .find(z => /^[A-Z]{3}\d{3}$/.test(z)) || null;
 
-            // Build a *human-facing* NWS alert page (NOT the JSON endpoint)
-            const renderedUrl = primaryZone
-                ? `https://forecast.weather.gov/showsigwx.php?warnzone=${primaryZone}`
-                : `https://www.weather.gov/`;
+	    // Human-facing NWS page (not JSON); zone-only is reliable
+	    const renderedUrl = zone
+	        ? `https://forecast.weather.gov/showsigwx.php?warnzone=${zone}`
+	        : `https://www.weather.gov/`;
+	
+	    // Time window for per-day matching
+	    const startISO = feature.properties.onset
+	        || feature.properties.effective
+	        || feature.properties.sent
+	        || null;
+	    const endISO = feature.properties.ends
+	        || feature.properties.expires
+	        || null;
+	
+	    return {
+	        headline: feature.properties.headline,
+	        severity: feature.properties.severity,
+	        url: renderedUrl,
+	        start: startISO,
+	        end: endISO
+	    };
+	});
 
-            return {
-                headline: feature.properties.headline,
-                severity: feature.properties.severity,
-                url: renderedUrl
-            };
-        });
 
     } catch (error) {
         console.warn('Alert fetch failed', error);

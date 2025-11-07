@@ -9,8 +9,8 @@ function renderWeatherTable(locationsData) {
         container.innerHTML = '<p class="no-data">No weather data available</p>';
         return;
     }
-    
-    // Get all unique dates from all locations (first 7 days)
+
+    // Collect unique dates
     const allDates = new Set();
     locationsData.forEach(location => {
         if (location.forecast) {
@@ -18,54 +18,70 @@ function renderWeatherTable(locationsData) {
             dates.forEach(date => allDates.add(date));
         }
     });
-    
+
     const sortedDates = Array.from(allDates).sort().slice(0, 7);
-    
-    // Build table HTML
+
+    // Start table
     let tableHTML = '<table class="weather-table"><thead><tr><th>Date</th>';
-    
-    // Header row with location names
+
+    // Header row: location names only (no icons here)
     locationsData.forEach(location => {
-        const alertIcon = location.alerts && location.alerts.length > 0 
-            ? `<span class="alert-icon" onclick="showAlerts(${location.index})" title="Active weather alerts">⚠️</span>`
-            : '';
         tableHTML += `<th>${location.name}</th>`;
     });
-    
+
     tableHTML += '</tr></thead><tbody>';
-    
+
     // Data rows for each date
     sortedDates.forEach(dateStr => {
         const date = new Date(dateStr + 'T12:00:00');
         const dateLabel = formatDateLabel(date);
-        
+
         tableHTML += `<tr><td><strong>${dateLabel}</strong></td>`;
-        
+
         locationsData.forEach(location => {
             if (location.dailyData && location.dailyData[dateStr]) {
                 const day = location.dailyData[dateStr];
                 const period = location.forecast.find(p => p.startTime.startsWith(dateStr));
-                const cellAlert = (location.alerts && location.alerts.length > 0)
-  ? `<a class="alert-icon" href="${location.alerts[0].url}" target="_blank" rel="noopener" title="${location.alerts[0].headline}">⚠️</a>`
-  : '';
+
+                // Check alerts for this specific day
+                const alertForDay = (location.alerts || []).find(a => alertAppliesOnDate(a, dateStr));
+                const cellAlert = alertForDay
+                    ? `<a class="alert-icon" href="${alertForDay.url}" target="_blank" rel="noopener" title="${alertForDay.headline}">⚠️</a>`
+                    : '';
 
                 tableHTML += `<td>${cellAlert}${renderWeatherCell(day, period)}</td>`;
             } else {
                 tableHTML += '<td>—</td>';
             }
         });
-        
+
         tableHTML += '</tr>';
     });
-    
+
     tableHTML += '</tbody></table>';
     container.innerHTML = tableHTML;
+}
+
+/**
+ * Determine whether an alert overlaps the given date (YYYY-MM-DD)
+ */
+function alertAppliesOnDate(alert, dateStr) {
+    const dayStart = new Date(`${dateStr}T00:00:00`);
+    const dayEnd   = new Date(`${dateStr}T23:59:59`);
+
+    const start = alert.start ? new Date(alert.start) : null;
+    const end   = alert.end   ? new Date(alert.end)   : null;
+
+    const startsBeforeDayEnds = !start || start <= dayEnd;
+    const endsAfterDayStarts  = !end   || end   >= dayStart;
+
+    return startsBeforeDayEnds && endsAfterDayStarts;
 }
 
 function renderWeatherCell(dayData, period) {
     const iconUrl = period?.icon || 'https://api.weather.gov/icons/land/day/sct?size=medium';
     const condition = period?.shortForecast || '';
-    
+
     return `
         <div class="weather-cell">
             <img src="${iconUrl}" alt="${condition}" title="${condition}" />
@@ -79,24 +95,16 @@ function formatDateLabel(date) {
     const today = new Date();
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    
+
     today.setHours(0, 0, 0, 0);
     tomorrow.setHours(0, 0, 0, 0);
     date.setHours(0, 0, 0, 0);
-    
+
     if (date.getTime() === today.getTime()) return 'Today';
     if (date.getTime() === tomorrow.getTime()) return 'Tomorrow';
-    
+
     const options = { weekday: 'short', month: 'short', day: 'numeric' };
     return date.toLocaleDateString('en-US', options);
-}
-
-function showAlerts(locationIndex) {
-    const location = window.appState.locations[locationIndex];
-    if (!location || !location.alerts || location.alerts.length === 0) return;
-    
-    // Open first alert URL in new tab
-    window.open(location.alerts[0].url, '_blank');
 }
 
 function showError(message, inputIndex = null) {
@@ -104,63 +112,33 @@ function showError(message, inputIndex = null) {
         const errorElement = document.getElementById(`error-${inputIndex + 1}`);
         if (errorElement) {
             errorElement.textContent = message;
-            setTimeout(() => {
-                errorElement.textContent = '';
-            }, 5000);
+            setTimeout(() => { errorElement.textContent = ''; }, 5000);
         }
     } else {
         const globalError = document.getElementById('error-global');
         globalError.textContent = message;
         globalError.classList.remove('hidden');
-        setTimeout(() => {
-            globalError.classList.add('hidden');
-        }, 8000);
-    }
-}
-
-function showLoading(show) {
-    const loading = document.getElementById('loading');
-    loading.style.display = show ? 'block' : 'none';
-}
-
-function clearInputError(inputIndex) {
-    const errorElement = document.getElementById(`error-${inputIndex + 1}`);
-    if (errorElement) {
-        errorElement.textContent = '';
+        setTimeout(() => { globalError.classList.add('hidden'); }, 5000);
     }
 }
 
 function updateLocationInput(index, locationName) {
     const input = document.getElementById(`location-${index + 1}`);
-    if (input) {
-        input.value = locationName;
-    }
+    if (input) input.value = locationName;
 }
 
 /**
  * Theme management
  */
-function initTheme() {
-    const savedTheme = localStorage.getItem('theme') || 'system';
-    setTheme(savedTheme);
-    
-    document.getElementById('theme-light').addEventListener('click', () => setTheme('light'));
-    document.getElementById('theme-dark').addEventListener('click', () => setTheme('dark'));
-    document.getElementById('theme-system').addEventListener('click', () => setTheme('system'));
-}
-
 function setTheme(theme) {
     localStorage.setItem('theme', theme);
-    
-    // Remove active class from all buttons
+
     document.querySelectorAll('.theme-toggle button').forEach(btn => {
         btn.classList.remove('active');
     });
     
-    // Add active class to selected button
     document.getElementById(`theme-${theme}`).classList.add('active');
     
-    // Apply theme
     if (theme === 'system') {
         document.documentElement.removeAttribute('data-theme');
     } else {
