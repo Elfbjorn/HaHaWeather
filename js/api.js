@@ -69,7 +69,7 @@ async function geocodeZipCode(zip) {
  * City → lat/lon (OpenWeather geocoder)
  */
 async function geocodeCityName(cityName) {
-    const API_KEY = "ee46d3055bcdbdb3c1d5187fed8e4dd1";
+    const API_KEY = "f00c6306f9ff9e67a6562b12f1d91f82";
 
     let city = cityName.trim();
     let state = null;
