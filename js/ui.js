@@ -29,7 +29,7 @@ function renderWeatherTable(locationsData) {
         const alertIcon = location.alerts && location.alerts.length > 0 
             ? `<span class="alert-icon" onclick="showAlerts(${location.index})" title="Active weather alerts">⚠️</span>`
             : '';
-        tableHTML += `<th>${location.name}${alertIcon}</th>`;
+        tableHTML += `<th>${location.name}</th>`;
     });
     
     tableHTML += '</tr></thead><tbody>';
@@ -45,8 +45,11 @@ function renderWeatherTable(locationsData) {
             if (location.dailyData && location.dailyData[dateStr]) {
                 const day = location.dailyData[dateStr];
                 const period = location.forecast.find(p => p.startTime.startsWith(dateStr));
-                
-                tableHTML += `<td>${renderWeatherCell(day, period)}</td>`;
+                const cellAlert = (location.alerts && location.alerts.length > 0)
+  ? `<a class="alert-icon" href="${location.alerts[0].url}" target="_blank" rel="noopener" title="${location.alerts[0].headline}">⚠️</a>`
+  : '';
+
+                tableHTML += `<td>${cellAlert}${renderWeatherCell(day, period)}</td>`;
             } else {
                 tableHTML += '<td>—</td>';
             }

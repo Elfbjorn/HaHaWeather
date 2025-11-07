@@ -194,7 +194,7 @@ async function fetchNWSAlerts(lat, lon) {
         return data.features.map(feature => ({
             headline: feature.properties.headline,
             severity: feature.properties.severity,
-            url: feature.properties.url || `https://www.weather.gov/`
+            url: feature.properties.url || feature.id || `https://www.weather.gov/`
         }));
     } catch (error) {
         console.warn('Alert fetch failed', error);
