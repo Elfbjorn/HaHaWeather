@@ -3,48 +3,25 @@ var API_TIMEOUT = 5000;
 /**
  * Fetch with timeout
  */
-// api.js (or wherever fetchWithTimeout lives)
-export async function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
+function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(new Error("Request timed out")), timeoutMs);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  // Normalize url to string for tests like startsWith
-  const urlStr = typeof url === "string" ? url : url.toString();
+  const headers = Object.assign(
+    {},
+    { "Accept": "application/geo+json" }, // required for NWS
+    options.headers || {}
+  );
 
-  // Start with any headers the caller passed
-  const callerHeaders = new Headers(options.headers || {});
+  const finalOptions = Object.assign({}, options, {
+    headers,
+    signal: controller.signal
+  });
 
-  // Build defaults for NWS only
-  const nwsDefaults = new Headers();
-  if (urlStr.startsWith("https://api.weather.gov")) {
-    // Always safe in browser:
-    nwsDefaults.set("Accept", "application/geo+json");
-    // Only set User-Agent when not running in a browser (browsers forbid it)
-    const runningInBrowser = typeof window !== "undefined" && typeof window.document !== "undefined";
-    if (!runningInBrowser) {
-      // Include contact info per NWS guidance
-      nwsDefaults.set("User-Agent", "HaHaWeather/1.0 (+https://yourdomain.example/contact)");
-    }
-  }
-
-  // Merge: defaults first, then caller (caller can override)
-  const mergedHeaders = new Headers(nwsDefaults);
-  for (const [k, v] of callerHeaders.entries()) mergedHeaders.set(k, v);
-
-  // Final init object; our AbortController takes precedence
-  const init = {
-    ...options,
-    headers: mergedHeaders,
-    signal: controller.signal,
-  };
-
-  try {
-    const resp = await fetch(url, init);
-    return resp;
-  } finally {
-    clearTimeout(timeoutId);
-  }
+  return fetch(url, finalOptions)
+    .finally(() => clearTimeout(timeoutId));
 }
+
 
 
 /**
@@ -129,10 +106,15 @@ async function geocodeCityName(cityName) {
 }
 
 
-async function geocodeLocation(input) {
-    const clean = input.trim();
-    if (isZipCode(clean)) return geocodeZipCode(clean.substring(0, 5));
-    return geocodeCityName(clean);
+async function geocodeLocation(locationName) {
+  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(locationName)}`;
+  const resp = await fetch(url);
+  const data = await resp.json();
+  if (!data || data.length === 0) throw new Error("Location not found");
+  return {
+    lat: parseFloat(data[0].lat),
+    lon: parseFloat(data[0].lon)
+  };
 }
 
 /**
