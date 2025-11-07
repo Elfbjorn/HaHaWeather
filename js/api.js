@@ -110,56 +110,55 @@ async function fetchNWSForecast(lat, lon) {
 /**
  * Fetch alerts using the correct zone (CRITICAL FIX)
  */
-/**
 async function fetchNWSAlerts(lat, lon) {
     try {
-        // 1) Get zone + county info from Points API (always reliable)
-        const pointsResp = await fetchWithTimeout(`https://api.weather.gov/points/${lat},${lon}`, {
-            headers: { 'User-Agent': 'WeatherCompareApp' }
-        });
-        const pointsData = await pointsResp.json();
+	// 1) Get zone + county info from Points API (always reliable)
+	const pointsResp = await fetchWithTimeout(`https://api.weather.gov/points/${lat},${lon}`, {
+	    headers: { 'User-Agent': 'WeatherCompareApp' }
+	});
+	const pointsData = await pointsResp.json();
 
-        const forecastZone = pointsData.properties?.forecastZone?.split('/').pop() || "";
-        const countyCode = pointsData.properties?.county?.split('/').pop() || "";
-        const firewxzone = pointsData.properties?.fireWeatherZone?.split('/').pop() || forecastZone;
+	const forecastZone = pointsData.properties?.forecastZone?.split('/').pop() || "";
+	const countyCode = pointsData.properties?.county?.split('/').pop() || "";
+	const firewxzone = pointsData.properties?.fireWeatherZone?.split('/').pop() || forecastZone;
 
-        // 2) Get active alerts for the point
-        const alertsResp = await fetchWithTimeout(
-            `https://api.weather.gov/alerts/active?point=${lat},${lon}`,
-            { headers: { 'User-Agent': 'WeatherCompareApp' } }
-        );
-        if (!alertsResp.ok) return [];
-        const alertsData = await alertsResp.json();
+	// 2) Get active alerts for the point
+	const alertsResp = await fetchWithTimeout(
+	    `https://api.weather.gov/alerts/active?point=${lat},${lon}`,
+	    { headers: { 'User-Agent': 'WeatherCompareApp' } }
+	);
+	if (!alertsResp.ok) return [];
+	const alertsData = await alertsResp.json();
 
-        return (alertsData.features || []).map(alert => {
-            const p = alert.properties || {};
+	return (alertsData.features || []).map(alert => {
+	    const p = alert.properties || {};
 
-            const local_place1_raw = (p.areaDesc || "").trim();
-            const local_place1 = encodeURIComponent(local_place1_raw);
-            const product1 = encodeURIComponent(p.event || "");
+	    const local_place1_raw = (p.areaDesc || "").trim();
+	    const local_place1 = encodeURIComponent(local_place1_raw);
+	    const product1 = encodeURIComponent(p.event || "");
 
-            const latStr = Number(lat).toFixed(4);
-            const lonStr = Number(lon).toFixed(4);
+	    const latStr = Number(lat).toFixed(4);
+	    const lonStr = Number(lon).toFixed(4);
 
-            const url =
-                `https://forecast.weather.gov/showsigwx.php?` +
-                `warnzone=${forecastZone}` +
-                `&warncounty=${countyCode}` +
-                `&firewxzone=${firewxzone}` +
-                (local_place1 ? `&local_place1=${local_place1}` : "") +
-                (product1 ? `&product1=${product1}` : "") +
-                `&lat=${latStr}&lon=${lonStr}`;
+	    const url =
+		`https://forecast.weather.gov/showsigwx.php?` +
+		`warnzone=${forecastZone}` +
+		`&warncounty=${countyCode}` +
+		`&firewxzone=${firewxzone}` +
+		(local_place1 ? `&local_place1=${local_place1}` : "") +
+		(product1 ? `&product1=${product1}` : "") +
+		`&lat=${latStr}&lon=${lonStr}`;
 
-            return {
-                headline: p.headline,
-                severity: p.severity,
-                url,
-                event: p.event
-            };
-        });
+	    return {
+		headline: p.headline,
+		severity: p.severity,
+		url,
+		event: p.event
+	    };
+	});
     } catch (err) {
-        console.warn("Failed to fetch alerts:", err);
-        return [];
+	console.warn("Failed to fetch alerts:", err);
+	return [];
     }
 }
 
