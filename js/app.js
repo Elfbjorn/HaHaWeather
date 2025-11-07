@@ -18,7 +18,7 @@ async function initApp() {
         });
     } else {
         // ✅ Default fallback list
-        const defaults = ["Miami, FL", "Minneapolis, MN", "San Francisco, CA"];
+        const defaults = ["21043", "53706"];
 	defaults.forEach((name, index) => {
 	    const input = document.getElementById(`location-${index + 1}`);
 	    if (input) input.value = name;
