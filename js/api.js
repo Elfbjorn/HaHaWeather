@@ -21,14 +21,14 @@ async function fetchWithTimeout(url, options = {}) {
 }
 
 /**
- * Get user's location via IP
+ * IP-based default location
  */
 async function getUserLocation() {
     try {
         const response = await fetchWithTimeout('http://ip-api.com/json/');
         if (!response.ok) throw new Error('IP-API failed');
-        
         const data = await response.json();
+
         return {
             name: `${data.city}, ${data.regionName}`,
             lat: data.lat,
@@ -36,7 +36,6 @@ async function getUserLocation() {
             state: data.regionName
         };
     } catch (error) {
-        console.warn('IP geolocation failed, using Chicago default', error);
         return {
             name: 'Chicago, IL',
             lat: 41.8781,
@@ -46,189 +45,84 @@ async function getUserLocation() {
     }
 }
 
-/**
- * Check if input is a ZIP code
- */
 function isZipCode(input) {
     return /^\d{5}(-\d{4})?$/.test(input.trim());
 }
 
 /**
- * Geocode ZIP code using zippopotam.us
+ * ZIP → lat/lon
  */
 async function geocodeZipCode(zip) {
-    try {
-        const response = await fetchWithTimeout(`https://api.zippopotam.us/us/${zip}`);
-        
-        if (!response.ok) {
-            throw new Error('ZIP code not found');
-        }
-        
-        const data = await response.json();
-        const place = data.places[0];
-        
-        return {
-            name: `${place['place name']}, ${place['state abbreviation']}`,
-            lat: parseFloat(place.latitude),
-            lon: parseFloat(place.longitude),
-            state: place.state
-        };
-    } catch (error) {
-        throw new Error(`Invalid ZIP code: ${zip}`);
-    }
+    const response = await fetchWithTimeout(`https://api.zippopotam.us/us/${zip}`);
+    if (!response.ok) throw new Error(`Invalid ZIP code: ${zip}`);
+    const data = await response.json();
+    const place = data.places[0];
+
+    return {
+        name: `${place['place name']}, ${place['state abbreviation']}`,
+        lat: parseFloat(place.latitude),
+        lon: parseFloat(place.longitude)
+    };
 }
 
 /**
- * Geocode city name using Open-Meteo
+ * City → lat/lon (OpenWeather geocoder)
  */
 async function geocodeCityName(cityName) {
-    try {
-        // Clean up input - remove state abbreviations if present
-        let searchTerm = cityName;
-        const stateMatch = cityName.match(/,\s*([A-Z]{2})\s*$/i);
-        if (stateMatch) {
-            // Extract just the city name for better search results
-            searchTerm = cityName.replace(/,\s*[A-Z]{2}\s*$/i, '').trim();
-        }
-        
-        const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(searchTerm)}&count=10&language=en&format=json`;
-        const response = await fetchWithTimeout(url);
-        
-        if (!response.ok) throw new Error('Geocoding failed');
-        
-        const data = await response.json();
-        if (!data.results || data.results.length === 0) {
-            throw new Error('Location not found');
-        }
-        
-        // If user provided a state, try to match it
-        let result;
-        if (stateMatch) {
-            const stateAbbrev = stateMatch[1].toUpperCase();
-            result = data.results.find(r => 
-                r.country_code === 'US' && 
-                (r.admin1?.toUpperCase().includes(stateAbbrev) || 
-                 r.admin1_id?.toString().includes(stateAbbrev))
-            );
-        }
-        
-        // Fallback: prioritize US results
-        if (!result) {
-            result = data.results.find(r => r.country_code === 'US');
-        }
-        
-        // Last resort: use first result
-        if (!result) {
-            result = data.results[0];
-        }
-        
-        return {
-            name: `${result.name}, ${result.admin1 || result.country}`,
-            lat: result.latitude,
-            lon: result.longitude,
-            state: result.admin1
-        };
-    } catch (error) {
-        throw new Error(`Unable to find location: ${cityName}`);
-    }
+    const API_KEY = "<YOUR_OPENWEATHER_API_KEY>";
+    const url = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(cityName)}&limit=5&appid=${API_KEY}`;
+    const response = await fetchWithTimeout(url);
+    const data = await response.json();
+    if (!data.length) throw new Error(`Unable to find location: ${cityName}`);
+    const r = data[0];
+    return { name: `${r.name}, ${r.state || r.country}`, lat: r.lat, lon: r.lon };
 }
 
-/**
- * Geocode city name or ZIP code
- */
 async function geocodeLocation(input) {
-    const cleanInput = input.trim();
-    
-    if (isZipCode(cleanInput)) {
-        return await geocodeZipCode(cleanInput.substring(0, 5));
-    } else {
-        return await geocodeCityName(cleanInput);
-    }
+    const clean = input.trim();
+    if (isZipCode(clean)) return geocodeZipCode(clean.substring(0, 5));
+    return geocodeCityName(clean);
 }
 
 /**
- * Fetch NWS forecast for coordinates
+ * Fetch forecast + zone (CRITICAL FIX)
  */
 async function fetchNWSForecast(lat, lon) {
-    try {
-        // Step 1: Get gridpoint
-        const pointsUrl = `https://api.weather.gov/points/${lat},${lon}`;
-        const pointsResponse = await fetchWithTimeout(pointsUrl, {
-            headers: { 'User-Agent': 'WeatherCompareApp' }
-        });
-        
-        if (!pointsResponse.ok) {
-            throw new Error('Location outside NWS coverage (U.S. only)');
-        }
-        
-        const pointsData = await pointsResponse.json();
-        const forecastUrl = pointsData.properties.forecast;
-        
-        // Step 2: Get forecast
-        const forecastResponse = await fetchWithTimeout(forecastUrl, {
-            headers: { 'User-Agent': 'WeatherCompareApp' }
-        });
-        
-        if (!forecastResponse.ok) throw new Error('Forecast unavailable');
-        
-        const forecastData = await forecastResponse.json();
-        return forecastData.properties.periods;
-    } catch (error) {
-        throw new Error(`Weather data unavailable: ${error.message}`);
-    }
+    const pointsResponse = await fetchWithTimeout(`https://api.weather.gov/points/${lat},${lon}`, {
+        headers: { 'User-Agent': 'WeatherCompareApp' }
+    });
+    const pointsData = await pointsResponse.json();
+
+    const forecastUrl = pointsData.properties.forecast;
+    const forecastZone = pointsData.properties.forecastZone.split('/').pop();
+
+    const forecastResponse = await fetchWithTimeout(forecastUrl, {
+        headers: { 'User-Agent': 'WeatherCompareApp' }
+    });
+    const forecastData = await forecastResponse.json();
+
+    return {
+        periods: forecastData.properties.periods,
+        forecastZone
+    };
 }
 
 /**
- * Fetch NWS active alerts
+ * Fetch alerts using the correct zone (CRITICAL FIX)
  */
-/**
- * Fetch NWS active alerts (human-friendly rendered URLs)
- */
-async function fetchNWSAlerts(lat, lon) {
-    try {
-        const url = `https://api.weather.gov/alerts/active?point=${lat},${lon}`;
-        const response = await fetchWithTimeout(url, {
-            headers: { 'User-Agent': 'WeatherCompareApp' }
-        });
+async function fetchNWSAlerts(lat, lon, forecastZone) {
+    const url = `https://api.weather.gov/alerts/active?point=${lat},${lon}`;
+    const response = await fetchWithTimeout(url, {
+        headers: { 'User-Agent': 'WeatherCompareApp' }
+    });
+    if (!response.ok) return [];
 
-        if (!response.ok) return [];
-
-        const data = await response.json();
-
-	return data.features.map(feature => {
-	    // Extract a usable forecast zone like "MDZ506"
-	    const zones = feature.properties.affectedZones || [];
-	    const zone = zones
-	        .map(z => z.split('/').pop())
-	        .find(z => /^[A-Z]{3}\d{3}$/.test(z)) || null;
-
-	    // Human-facing NWS page (not JSON); zone-only is reliable
-	    const renderedUrl = zone
-	        ? `https://forecast.weather.gov/showsigwx.php?warnzone=${zone}`
-	        : `https://www.weather.gov/`;
-	
-	    // Time window for per-day matching
-	    const startISO = feature.properties.onset
-	        || feature.properties.effective
-	        || feature.properties.sent
-	        || null;
-	    const endISO = feature.properties.ends
-	        || feature.properties.expires
-	        || null;
-	
-	    return {
-	        headline: feature.properties.headline,
-	        severity: feature.properties.severity,
-	        url: renderedUrl,
-	        start: startISO,
-	        end: endISO
-	    };
-	});
-
-
-    } catch (error) {
-        console.warn('Alert fetch failed', error);
-        return [];
-    }
+    const data = await response.json();
+    return data.features.map(f => ({
+        headline: f.properties.headline,
+        severity: f.properties.severity,
+        url: `https://forecast.weather.gov/showsigwx.php?warnzone=${forecastZone}`,
+        start: f.properties.onset,
+        end: f.properties.ends
+    }));
 }
-
