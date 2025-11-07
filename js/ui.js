@@ -1,212 +1,300 @@
 /**
- * UI rendering and interaction handlers
+ * ui.js — COMPLETE, DROP-IN
+ * - Works with your current api.js (NWS-only) and app.js flow
+ * - Renders 3-column compare table with cell-level alert icons
+ * - No ES modules; browser-safe
+ * - Includes theme + loading helpers
  */
 
-function renderWeatherTable(locationsData) {
-    const container = document.getElementById('weather-table-container');
-    
-    if (!locationsData || locationsData.length === 0) {
-        container.innerHTML = '<p class="no-data">No weather data available</p>';
-        return;
-    }
+/* =========================
+   Helpers
+   ========================= */
 
-    // Collect unique dates
-    const allDates = new Set();
-    locationsData.forEach(location => {
-        if (location.forecast) {
-            const dates = Object.keys(location.dailyData).slice(0, 7);
-            dates.forEach(date => allDates.add(date));
-        }
-    });
+function escapeHtml(str) {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
 
-    const sortedDates = Array.from(allDates).sort().slice(0, 7);
+function pad2(n) { return String(n).padStart(2, "0"); }
 
-    // Start table
-    let tableHTML = '<table class="weather-table"><thead><tr><th>Date</th>';
+function formatDateKey(dateLike) {
+  const d = new Date(dateLike);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
 
-    // Header row: location names only (no icons here)
-    locationsData.forEach(location => {
-        tableHTML += `<th>${location.name}</th>`;
-    });
-
-    tableHTML += '</tr></thead><tbody>';
-
-    // Data rows for each date
-    sortedDates.forEach(dateStr => {
-        const date = new Date(dateStr + 'T12:00:00');
-        const dateLabel = formatDateLabel(date);
-
-        tableHTML += `<tr><td><strong>${dateLabel}</strong></td>`;
-
-        locationsData.forEach(location => {
-            if (location.dailyData && location.dailyData[dateStr]) {
-                const day = location.dailyData[dateStr];
-                const period = location.forecast.find(p => p.startTime.startsWith(dateStr));
-
-                // Check alerts for this specific day
-		const alertForDay = (location.alerts || []).find(a => alertAppliesOnDate(a, dateStr));
-
-		const cellAlert = alertForDay
-    			? `<a class="alert-icon"
-    			      href="${alertForDay.properties?.link || alertForDay.properties?.url}"
-    			      target="_blank" rel="noopener"
-    			      title="${alertForDay.properties?.headline || alertForDay.properties?.event}">
-    			      ⚠️
-    			   </a>`
-    		: '';
-
-                tableHTML += `<td>${cellAlert}${renderWeatherCell(day, period)}</td>`;
-            } else {
-                tableHTML += '<td>—</td>';
-            }
-        });
-
-        tableHTML += '</tr>';
-    });
-
-    tableHTML += '</tbody></table>';
-    container.innerHTML = tableHTML;
+function formatDateLabel(dateLike) {
+  const d = new Date(dateLike);
+  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
 /**
- * Determine whether an alert overlaps the given date (YYYY-MM-DD)
+ * Returns true if any time on dateKey (00:00-23:59) overlaps alert window.
+ * Accepts effective/onset/sent + expires/ends fallbacks.
  */
-function alertAppliesOnDate(alert, dateStr) {
-    const dayStart = new Date(`${dateStr}T00:00:00`);
-    const dayEnd   = new Date(`${dateStr}T23:59:59`);
+function alertAppliesOnDate(alert, dateKey) {
+  if (!alert || !alert.properties) return false;
 
-    const start = alert.start ? new Date(alert.start) : null;
-    const end   = alert.end   ? new Date(alert.end)   : null;
+  const p = alert.properties;
+  const eff = p.effective || p.onset || p.sent;
+  const exp = p.expires  || p.ends;
 
-    const startsBeforeDayEnds = !start || start <= dayEnd;
-    const endsAfterDayStarts  = !end   || end   >= dayStart;
+  if (!eff && !exp) return false;
 
-    return startsBeforeDayEnds && endsAfterDayStarts;
+  // Build the window for the *day* represented by dateKey
+  const dayStart = new Date(`${dateKey}T00:00:00`);
+  const dayEnd   = new Date(`${dateKey}T23:59:59`);
+
+  // Missing start/end handling:
+  const start = eff ? new Date(eff) : new Date(dayStart);
+  const end   = exp ? new Date(exp) : new Date(dayEnd);
+
+  return (dayStart <= end) && (dayEnd >= start);
 }
 
+/**
+ * Converts getDailyRealFeelRange output into a date->object map.
+ * Supports either:
+ *  - Array form: [{date, high, low, realFeelHigh, realFeelLow, ...}, ...]
+ *  - Map form:   {"YYYY-MM-DD": {high, low, realFeelHigh, realFeelLow, ...}, ...}
+ */
+function normalizeDailyMap(dailyData) {
+  if (!dailyData) return {};
+  if (Array.isArray(dailyData)) {
+    const m = {};
+    for (const d of dailyData) {
+      // accept Date or ISO in d.date
+      const key = formatDateKey(d.date);
+      m[key] = d;
+    }
+    return m;
+  }
+  // assume it is already map keyed by YYYY-MM-DD
+  return dailyData;
+}
+
+/**
+ * Extracts a canonical list of date keys we will render as rows.
+ * Priority: the first location with dailyData; if absent, derive from periods.
+ */
+function deriveDateKeys(locations) {
+  // 1) Prefer dailyData from first location that has it
+  for (const loc of locations) {
+    const dm = normalizeDailyMap(loc && loc.dailyData);
+    const keys = Object.keys(dm || {});
+    if (keys.length) return keys.sort();
+  }
+  // 2) Fallback to period start dates
+  for (const loc of locations) {
+    if (loc && Array.isArray(loc.periods) && loc.periods.length) {
+      const map = {};
+      for (const p of loc.periods) {
+        const k = formatDateKey(p.startTime || p.start || p.validTime || p.date || new Date());
+        map[k] = true;
+      }
+      const keys = Object.keys(map);
+      if (keys.length) return keys.sort();
+    }
+  }
+  return [];
+}
+
+/* =========================
+   Cell rendering
+   ========================= */
+
+/**
+ * Renders the main content inside a cell (icon + temps). Safe defaults.
+ * dayData: {high, low, realFeelHigh, realFeelLow, ...}
+ * period:  NWS period object (for icon/shortForecast)
+ */
 function renderWeatherCell(dayData, period) {
-    const iconUrl = period?.icon || 'https://api.weather.gov/icons/land/day/sct?size=medium';
-    const condition = period?.shortForecast || '';
+  const iconUrl   = (period && period.icon) || 'https://api.weather.gov/icons/land/day/sct?size=medium';
+  const condition = (period && period.shortForecast) || '';
 
-    return `
-        <div class="weather-cell">
-            <img src="${iconUrl}" alt="${condition}" title="${condition}" />
-            <span class="temp">${dayData.high}°/${dayData.low}°</span>
-            <span class="realfeel">(Feels ${dayData.realFeelHigh}°/${dayData.realFeelLow}°)</span>
-        </div>
-    `;
+  const hi = (dayData && (dayData.high ?? dayData.max ?? "")) + "";
+  const lo = (dayData && (dayData.low  ?? dayData.min ?? "")) + "";
+  const rfHi = (dayData && (dayData.realFeelHigh ?? dayData.feelsLikeHigh ?? dayData.feelsLike ?? "")) + "";
+  const rfLo = (dayData && (dayData.realFeelLow  ?? dayData.feelsLikeLow  ?? dayData.feelsLike ?? "")) + "";
+
+  return `
+    <div class="weather-cell">
+      <img src="${escapeHtml(iconUrl)}" alt="${escapeHtml(condition)}" title="${escapeHtml(condition)}" />
+      <span class="temp">${escapeHtml(hi)}°/${escapeHtml(lo)}°</span>
+      <span class="realfeel">(Feels ${escapeHtml(rfHi)}°/${escapeHtml(rfLo)}°)</span>
+    </div>
+  `;
 }
 
-function formatDateLabel(date) {
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+/* =========================
+   Table rendering (MAIN)
+   ========================= */
 
-    today.setHours(0, 0, 0, 0);
-    tomorrow.setHours(0, 0, 0, 0);
-    date.setHours(0, 0, 0, 0);
-
-    if (date.getTime() === today.getTime()) return 'Today';
-    if (date.getTime() === tomorrow.getTime()) return 'Tomorrow';
-
-    const options = { weekday: 'short', month: 'short', day: 'numeric' };
-    return date.toLocaleDateString('en-US', options);
-}
-
-function clearInputError(index) {
-    const errorElement = document.getElementById(`error-${index + 1}`);
-    if (errorElement) {
-        errorElement.textContent = '';
+function renderWeatherTable(locationsInput) {
+  try {
+    const container = document.getElementById('weather-table-container');
+    if (!container) {
+      console.error("[UI] renderWeatherTable: container #weather-table-container not found.");
+      return;
     }
-}
 
-function showError(message, inputIndex = null) {
-    if (inputIndex !== null) {
-        const errorElement = document.getElementById(`error-${inputIndex + 1}`);
-        if (errorElement) {
-            errorElement.textContent = message;
-            setTimeout(() => { errorElement.textContent = ''; }, 5000);
+    // Normalize locations to exactly 3 columns (undefined -> empty)
+    const locations = [locationsInput[0] || null, locationsInput[1] || null, locationsInput[2] || null];
+
+    // Derive the date rows to render
+    const dateKeys = deriveDateKeys(locations);
+    if (!dateKeys.length) {
+      container.innerHTML = '<p class="no-data">No weather data available</p>';
+      return;
+    }
+
+    // Header
+    let html = '<table class="forecast-table"><thead><tr>';
+    html += '<th class="date-col">Date</th>';
+
+    for (let i = 0; i < 3; i++) {
+      const loc = locations[i];
+      let headerLabel = "undefined";
+      if (loc) {
+        headerLabel = loc.city ? `${loc.city}, ${loc.state}` : (loc.label || "Unknown");
+      }
+      html += `<th class="loc-col loc-${i}">${escapeHtml(headerLabel)}</th>`;
+    }
+    html += '</tr></thead><tbody>';
+
+    // Build body rows
+    for (const dateKey of dateKeys) {
+      html += `<tr class="date-row" data-date="${dateKey}">`;
+      html += `<td class="date-cell"><strong>${escapeHtml(formatDateLabel(dateKey))}</strong></td>`;
+
+      for (let col = 0; col < 3; col++) {
+        const loc = locations[col];
+
+        if (!loc) {
+          html += `<td class="forecast-cell empty-cell">—</td>`;
+          continue;
         }
-    } else {
-        const globalError = document.getElementById('error-global');
-        globalError.textContent = message;
-        globalError.classList.remove('hidden');
-        setTimeout(() => { globalError.classList.add('hidden'); }, 5000);
+
+        const dailyMap = normalizeDailyMap(loc.dailyData);
+        const day = dailyMap[dateKey] || null;
+
+        // find one representative period that starts on this dateKey
+        let period = null;
+        if (Array.isArray(loc.periods)) {
+          period = loc.periods.find(p => formatDateKey(p.startTime || p.start || p.date) === dateKey) || null;
+        }
+
+        // find an alert that applies for this dateKey
+        const alertsForLoc = Array.isArray(loc.alerts) ? loc.alerts : [];
+        const alertForDay = alertsForLoc.find(a => alertAppliesOnDate(a, dateKey));
+
+        let alertHtml = '';
+        if (alertForDay && alertForDay.properties) {
+          const link = alertForDay.properties.link || alertForDay.properties.url || "";
+          const title = alertForDay.properties.headline || alertForDay.properties.event || "Weather Alert";
+          if (link) {
+            alertHtml = `<a class="alert-icon" href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(title)}">⚠️</a>`;
+          } else {
+            // if no URL, still show icon (no link)
+            alertHtml = `<span class="alert-icon" title="${escapeHtml(title)}">⚠️</span>`;
+          }
+        }
+
+        const main = renderWeatherCell(day, period);
+        html += `<td class="forecast-cell">${alertHtml}${main}</td>`;
+      }
+
+      html += '</tr>';
     }
+
+    html += '</tbody></table>';
+    container.innerHTML = html;
+
+  } catch (err) {
+    console.error("[UI] renderWeatherTable ERROR:", err);
+  }
 }
 
-// showLoading / hideLoading - explicit and logged (no masking)
-function showLoading() {
-    console.log('[UI] showLoading()');
-    // Spinner overlay
-    let loader = document.getElementById('loading-overlay');
-    if (!loader) {
-        loader = document.createElement('div');
-        loader.id = 'loading-overlay';
-        loader.innerHTML = `<div class="spinner" aria-hidden="true"></div>`;
-        document.body.appendChild(loader);
-    }
-    loader.style.display = 'flex';
+/* =========================
+   Loading helpers (match your logs)
+   ========================= */
 
-    // Optional legacy text message element
-    const msg = document.getElementById('loading-message');
-    if (msg) msg.classList.remove('hidden');
+function showLoading() {
+  const el = document.getElementById('loading-overlay');
+  if (el) el.style.display = 'block';
+  try { console.log('[UI] showLoading()'); } catch (_) {}
 }
 
 function hideLoading() {
-    console.log('[UI] hideLoading()');
-    const loader = document.getElementById('loading-overlay');
-    if (loader) loader.style.display = 'none';
-
-    const msg = document.getElementById('loading-message');
-    if (msg) msg.classList.add('hidden');
+  const el = document.getElementById('loading-overlay');
+  if (el) el.style.display = 'none';
+  try { console.log('[UI] hideLoading()'); } catch (_) {}
 }
 
+/* =========================
+   Theme handling (match your logs)
+   ========================= */
 
-function updateLocationInput(index, locationName) {
-    const input = document.getElementById(`location-${index + 1}`);
-    if (input) input.value = locationName;
-}
-
-/**
- * Theme management
- */
-function setTheme(theme) {
-    localStorage.setItem('theme', theme);
-
-    document.querySelectorAll('.theme-toggle button').forEach(btn => {
-        btn.classList.remove('active');
-    });
-    
-    document.getElementById(`theme-${theme}`).classList.add('active');
-    
-    if (theme === 'system') {
-        document.documentElement.removeAttribute('data-theme');
-    } else {
-        document.documentElement.setAttribute('data-theme', theme);
-    }
-}
-
-// ---------------- THEME SYSTEM ----------------
-
-function applyTheme(theme) {
-    if (theme === 'system') {
-        document.documentElement.removeAttribute('data-theme');
-        localStorage.removeItem('theme');
-    } else {
-        document.documentElement.setAttribute('data-theme', theme);
-        localStorage.setItem('theme', theme);
-    }
+function applyTheme(mode) {
+  // mode: 'light' | 'dark' | 'system'
+  const root = document.documentElement;
+  let effective = mode;
+  if (mode === 'system') {
+    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    effective = prefersDark ? 'dark' : 'light';
+  }
+  root.setAttribute('data-theme', effective);
+  localStorage.setItem('theme', mode);
 }
 
 function initTheme() {
-    const saved = localStorage.getItem('theme') || 'system';
-    applyTheme(saved);
+  const saved = localStorage.getItem('theme') || 'system';
+  applyTheme(saved);
 
-    document.getElementById('theme-light')?.addEventListener('click', () => applyTheme('light'));
-    document.getElementById('theme-dark')?.addEventListener('click', () => applyTheme('dark'));
-    document.getElementById('theme-system')?.addEventListener('click', () => applyTheme('system'));
+  const elLight  = document.getElementById('theme-light');
+  const elDark   = document.getElementById('theme-dark');
+  const elSystem = document.getElementById('theme-system');
 
-    console.log(`Theme initialized: ${saved}`);
+  if (elLight)  elLight.addEventListener('click',  () => applyTheme('light'));
+  if (elDark)   elDark.addEventListener('click',   () => applyTheme('dark'));
+  if (elSystem) elSystem.addEventListener('click', () => applyTheme('system'));
+
+  try { console.log(`Theme initialized: ${saved}`); } catch (_) {}
 }
 
+/* =========================
+   Minimal styles (safe to keep here or move to CSS file)
+   ========================= */
+/* You may move these into your main CSS if preferred. */
+(function injectUiStyles(){
+  const css = `
+    .forecast-table { width: 100%; border-collapse: collapse; }
+    .forecast-table th, .forecast-table td { padding: 12px; text-align: center; }
+    .date-col { text-align: left; width: 160px; }
+    .loc-col { background: #1595f2; color: #fff; font-weight: 700; }
+    .forecast-cell { vertical-align: middle; position: relative; }
+    .alert-icon { display: inline-block; margin-right: 6px; font-size: 18px; text-decoration: none; }
+    .alert-icon:hover { transform: translateY(-1px); }
+    .weather-cell { display: inline-flex; align-items: center; gap: 8px; }
+    .weather-cell img { width: 42px; height: 42px; image-rendering: -webkit-optimize-contrast; }
+    .weather-cell .temp { font-weight: 700; }
+    .weather-cell .realfeel { opacity: 0.85; margin-left: 4px; font-size: 0.9em; }
+    .no-data { padding: 16px; text-align: center; opacity: 0.8; }
+  `;
+  const style = document.createElement('style');
+  style.setAttribute('data-ui-js', '1');
+  style.textContent = css;
+  document.head.appendChild(style);
+})();
+
+/* =========================
+   Public API (if you need to call manually)
+   ========================= */
+window.renderWeatherTable = renderWeatherTable;
+window.initTheme = initTheme;
+window.showLoading = showLoading;
+window.hideLoading = hideLoading;
