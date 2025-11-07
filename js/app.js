@@ -52,17 +52,15 @@ async function setLocation(index, locationInfo) {
     console.log(`[APP] setLocation(${index}) start for`, locationInfo);
     // Do not call showLoading/hideLoading here — handled at the caller.
     // Fetch forecast and extract periods + zone
-    const forecastResult = await fetchNWSForecast(locationInfo.lat, locationInfo.lon);
+    const { periods, forecastZone } = await fetchNWSForecast(locationInfo.lat, locationInfo.lon);
+
     if (!forecastResult || !Array.isArray(forecastResult.periods)) {
         // Throw so caller's catch can handle and we don't proceed with bad data
         throw new Error('Invalid forecast data returned from NWS');
     }
 
-    const forecast = forecastResult.periods;
-    const forecastZone = forecastResult.forecastZone || null;
-
-    // fetch alerts using forecastZone
-    const alerts = await fetchNWSAlerts(locationInfo.lat, locationInfo.lon, forecastZone);
+    const forecast = Array.isArray(periods) ? periods : [];
+    const alerts = await fetchNWSAlerts(locationInfo.lat, locationInfo.lon, forecastZone, locationInfo.name);
 
     // compute daily aggregates — this expects an array; we already validated
     const dailyData = getDailyRealFeelRange(forecast);
