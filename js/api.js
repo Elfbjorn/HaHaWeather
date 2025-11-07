@@ -199,4 +199,9 @@
   try {
     console.debug("[api.js] NWS client initialized (browser mode).");
   } catch (_) {}
+
+  // --- Backward compatibility alias for your UI ---
+  window.fetchNWSForecast = getNwsForecast;
+  window.fetchNWSAlerts = getNwsAlerts;
+  window.fetchNWSPoint = getNwsPoint;
 })();
