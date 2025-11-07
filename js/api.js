@@ -1,3 +1,4 @@
+cat > js/api.js << 'EOF'
 var API_TIMEOUT = 5000;
 
 /**
@@ -83,7 +84,15 @@ async function geocodeZipCode(zip) {
  */
 async function geocodeCityName(cityName) {
     try {
-        const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&count=5&language=en&format=json`;
+        // Clean up input - remove state abbreviations if present
+        let searchTerm = cityName;
+        const stateMatch = cityName.match(/,\s*([A-Z]{2})\s*$/i);
+        if (stateMatch) {
+            // Extract just the city name for better search results
+            searchTerm = cityName.replace(/,\s*[A-Z]{2}\s*$/i, '').trim();
+        }
+        
+        const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(searchTerm)}&count=10&language=en&format=json`;
         const response = await fetchWithTimeout(url);
         
         if (!response.ok) throw new Error('Geocoding failed');
@@ -93,14 +102,32 @@ async function geocodeCityName(cityName) {
             throw new Error('Location not found');
         }
         
-        // Prioritize US results
-        const usResult = data.results.find(r => r.country_code === 'US') || data.results[0];
+        // If user provided a state, try to match it
+        let result;
+        if (stateMatch) {
+            const stateAbbrev = stateMatch[1].toUpperCase();
+            result = data.results.find(r => 
+                r.country_code === 'US' && 
+                (r.admin1?.toUpperCase().includes(stateAbbrev) || 
+                 r.admin1_id?.toString().includes(stateAbbrev))
+            );
+        }
+        
+        // Fallback: prioritize US results
+        if (!result) {
+            result = data.results.find(r => r.country_code === 'US');
+        }
+        
+        // Last resort: use first result
+        if (!result) {
+            result = data.results[0];
+        }
         
         return {
-            name: `${usResult.name}, ${usResult.admin1 || usResult.country}`,
-            lat: usResult.latitude,
-            lon: usResult.longitude,
-            state: usResult.admin1
+            name: `${result.name}, ${result.admin1 || result.country}`,
+            lat: result.latitude,
+            lon: result.longitude,
+            state: result.admin1
         };
     } catch (error) {
         throw new Error(`Unable to find location: ${cityName}`);
@@ -175,3 +202,4 @@ async function fetchNWSAlerts(lat, lon) {
         return [];
     }
 }
+EOF
