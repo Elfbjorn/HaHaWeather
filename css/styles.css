@@ -245,3 +245,28 @@ footer a:hover {
         height: 36px;
     }
 }
+
+.cell-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.alert-row {
+  margin-bottom: 4px;
+}
+
+.alert-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.alert-clickable {
+  cursor: pointer;
+  color: #d77a00;
+}
+
+.alert-clickable:hover {
+  transform: translateY(-1px);
+}
+
