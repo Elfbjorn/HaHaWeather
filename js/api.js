@@ -135,36 +135,50 @@
   // ---------- Alerts (zone-first, county fallback) ----------
   // Returns array of GeoJSON features
 
-async function fetchNWSAlerts(lat, lon, { pointJson }) {
-  try {
-    const props = pointJson.properties;
-    const zone   = props.forecastZone;   // For zone-based hazards
-    const county = props.county;         // For county-based hazards (freeze warnings, heat advisories, etc.)
+  // ---------- Alerts (zone-first, county fallback) ----------
+  // Returns array of GeoJSON features
+  async function fetchNWSAlerts(lat, lon, { pointJson }) {
+    try {
+      const props = pointJson.properties || {};
+      const zoneUrl   = props.forecastZone;
+      const countyUrl = props.county;
 
-    let alerts = [];
+      const zoneCode   = codeFromZoneUrl(zoneUrl);
+      const countyCode = codeFromZoneUrl(countyUrl);
 
-    // Try zone first (some events like marine wind / coastal)
-    if (zone) {
-      const r = await fetch(`https://api.weather.gov/alerts/active?zone=${encodeURIComponent(zone)}`);
-      if (r.ok) {
-        const j = await r.json();
-        if (Array.isArray(j.features)) alerts = alerts.concat(j.features);
+      let alerts = [];
+
+      // Zone-based hazards (wind, coastal, winter storm watches, etc.)
+      if (zoneCode) {
+        try {
+          const j = await fetchJSON(
+            `https://api.weather.gov/alerts/active?zone=${encodeURIComponent(zoneCode)}`
+          );
+          if (j && Array.isArray(j.features)) alerts = alerts.concat(j.features);
+        } catch (e) {
+          console.warn("[api] zone alerts failed", zoneCode, e);
+        }
       }
-    }
 
-    // Then county fallback (Frost/Freeze/Heat/Advisory events)
-    if (county) {
-      const r2 = await fetch(`https://api.weather.gov/alerts/active?zone=${encodeURIComponent(county)}`);
-      if (r2.ok) {
-        const j2 = await r2.json();
-        if (Array.isArray(j2.features)) alerts = alerts.concat(j2.features);
+      // County-based alerts (Freeze Warning, Heat Advisory, Air Quality Alerts, etc.)
+      if (countyCode) {
+        try {
+          const j2 = await fetchJSON(
+            `https://api.weather.gov/alerts/active?zone=${encodeURIComponent(countyCode)}`
+          );
+          if (j2 && Array.isArray(j2.features)) alerts = alerts.concat(j2.features);
+        } catch (e) {
+          console.warn("[api] county alerts failed", countyCode, e);
+        }
       }
+
+      return alerts;
+    } catch (err) {
+      console.error("[api] fetchNWSAlerts ERROR:", err);
+      return [];
     }
-
-    return alerts;
-
-  } catch (err) {
-    console.error("[api.js] fetchNWSAlerts ERROR:", err);
-    return [];
   }
-})();
+  window.fetchNWSAlerts = fetchNWSAlerts;
+
+})(); // <--- THIS WAS MISSING!!!
+
