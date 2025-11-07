@@ -70,13 +70,37 @@ async function geocodeZipCode(zip) {
  */
 async function geocodeCityName(cityName) {
     const API_KEY = "<YOUR_OPENWEATHER_API_KEY>";
-    const url = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(cityName)}&limit=5&appid=${API_KEY}`;
+
+    let city = cityName.trim();
+    let state = null;
+
+    // Detect "City, ST" format
+    const match = city.match(/^(.+?),\s*([A-Za-z]{2})$/);
+    if (match) {
+        city = match[1].trim();
+        state = match[2].toUpperCase();
+    }
+
+    // Build query
+    // If we have state:   q=City,ST,US
+    // If not:             q=City,US (still strongly biased to U.S.)
+    const q = state ? `${city},${state},US` : `${city},US`;
+
+    const url = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(q)}&limit=5&appid=${API_KEY}`;
     const response = await fetchWithTimeout(url);
     const data = await response.json();
+
     if (!data.length) throw new Error(`Unable to find location: ${cityName}`);
+
     const r = data[0];
-    return { name: `${r.name}, ${r.state || r.country}`, lat: r.lat, lon: r.lon };
+    return {
+        name: `${r.name}, ${r.state || 'US'}`,
+        lat: r.lat,
+        lon: r.lon,
+        state: r.state
+    };
 }
+
 
 async function geocodeLocation(input) {
     const clean = input.trim();
