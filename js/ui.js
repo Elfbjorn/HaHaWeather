@@ -129,6 +129,24 @@ function showError(message, inputIndex = null) {
     }
 }
 
+function showLoading() {
+    let loader = document.getElementById('loading-overlay');
+    if (!loader) {
+        loader = document.createElement('div');
+        loader.id = 'loading-overlay';
+        loader.innerHTML = `<div class="spinner"></div>`;
+        document.body.appendChild(loader);
+    }
+    loader.style.display = 'flex';
+}
+
+function hideLoading() {
+    const loader = document.getElementById('loading-overlay');
+    if (loader) {
+        loader.style.display = 'none';
+    }
+}
+
 function updateLocationInput(index, locationName) {
     const input = document.getElementById(`location-${index + 1}`);
     if (input) input.value = locationName;
