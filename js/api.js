@@ -149,12 +149,17 @@ async function fetchNWSAlerts(lat, lon) {
 		(product1 ? `&product1=${product1}` : "") +
 		`&lat=${latStr}&lon=${lonStr}`;
 
-	    return {
-		headline: p.headline,
-		severity: p.severity,
-		url,
-		event: p.event
-	    };
+		return {
+		    headline: p.headline,
+		    severity: p.severity,
+		    url,
+		    event: p.event,
+		    
+		    // ✅ Add these two lines:
+		    start: new Date(p.onset || p.effective || p.sent || Date.now()),
+		    end: new Date(p.ends || p.expires || p.onset || Date.now())
+		};
+
 	});
     } catch (err) {
 	console.warn("Failed to fetch alerts:", err);
