@@ -19,11 +19,15 @@ async function initApp() {
     } else {
         // ✅ Default fallback list
         const defaults = ["Miami, FL", "Minneapolis, MN", "San Francisco, CA"];
-        defaults.forEach((name, index) => {
-            const input = document.getElementById(`location-${index + 1}`);
-            if (input) input.value = name;
-            updateLocation(index);
-        });
+	defaults.forEach((name, index) => {
+	    const input = document.getElementById(`location-${index + 1}`);
+	    if (input) input.value = name;
+	});
+	
+	// ✅ Ensure browser commits input values before running lookups
+	requestAnimationFrame(() => {
+	    defaults.forEach((_, index) => updateLocation(index));
+	});
     }
 }
 
