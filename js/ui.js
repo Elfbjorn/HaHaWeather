@@ -129,23 +129,33 @@ function showError(message, inputIndex = null) {
     }
 }
 
+// showLoading / hideLoading - explicit and logged (no masking)
 function showLoading() {
+    console.log('[UI] showLoading()');
+    // Spinner overlay
     let loader = document.getElementById('loading-overlay');
     if (!loader) {
         loader = document.createElement('div');
         loader.id = 'loading-overlay';
-        loader.innerHTML = `<div class="spinner"></div>`;
+        loader.innerHTML = `<div class="spinner" aria-hidden="true"></div>`;
         document.body.appendChild(loader);
     }
     loader.style.display = 'flex';
+
+    // Optional legacy text message element
+    const msg = document.getElementById('loading-message');
+    if (msg) msg.classList.remove('hidden');
 }
 
 function hideLoading() {
+    console.log('[UI] hideLoading()');
     const loader = document.getElementById('loading-overlay');
-    if (loader) {
-        loader.style.display = 'none';
-    }
+    if (loader) loader.style.display = 'none';
+
+    const msg = document.getElementById('loading-message');
+    if (msg) msg.classList.add('hidden');
 }
+
 
 function updateLocationInput(index, locationName) {
     const input = document.getElementById(`location-${index + 1}`);
