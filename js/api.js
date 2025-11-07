@@ -111,77 +111,40 @@ async function fetchNWSForecast(lat, lon) {
  * Fetch alerts using the correct zone (CRITICAL FIX)
  */
 /**
- * Fetch NWS active alerts and construct FULL rendered URL
- * Requires: forecastZone from fetchNWSForecast() and location name for fallback
- */
-/**
- * Fetch NWS active alerts and construct FULL rendered URL
- */
-async function fetchNWSAlerts(lat, lon, forecastZone, locationName = '') {
+async function fetchNWSAlerts(lat, lon) {
     try {
-        const url = `https://api.weather.gov/alerts/active?point=${lat},${lon}`;
-        const response = await fetchWithTimeout(url, {
+        // 1) Get zone + county info from Points API (always reliable)
+        const pointsResp = await fetchWithTimeout(`https://api.weather.gov/points/${lat},${lon}`, {
             headers: { 'User-Agent': 'WeatherCompareApp' }
         });
+        const pointsData = await pointsResp.json();
 
-        if (!response.ok) return [];
+        const forecastZone = pointsData.properties?.forecastZone?.split('/').pop() || "";
+        const countyCode = pointsData.properties?.county?.split('/').pop() || "";
+        const firewxzone = pointsData.properties?.fireWeatherZone?.split('/').pop() || forecastZone;
 
-        const data = await response.json();
+        // 2) Get active alerts for the point
+        const alertsResp = await fetchWithTimeout(
+            `https://api.weather.gov/alerts/active?point=${lat},${lon}`,
+            { headers: { 'User-Agent': 'WeatherCompareApp' } }
+        );
+        if (!alertsResp.ok) return [];
+        const alertsData = await alertsResp.json();
 
-const alerts = data.features || [];
-
-// DEBUG: log raw alerts to see actual zone/county fields returned
-console.groupCollapsed(`[NWS Alerts] for ${lat}, ${lon}`);
-alerts.forEach((a, i) => {
-    console.log(`Alert #${i}:`, {
-        event: a.properties?.event,
-        areaDesc: a.properties?.areaDesc,
-        affectedZones: a.properties?.affectedZones,
-        UGC: a.properties?.geocode?.UGC,
-        geocode: a.properties?.geocode
-    });
-});
-console.groupEnd();
-
-
-        return alerts.map(alert => {
+        return (alertsData.features || []).map(alert => {
             const p = alert.properties || {};
 
-            // ---- Forecast Zone (MDZ506, etc.)
-            const affected = Array.isArray(p.affectedZones) ? p.affectedZones : [];
-            const zoneCodes = affected.map(z => z.split('/').pop()).filter(Boolean);
-            const warnzone =
-                (zoneCodes.find(z => z === forecastZone) ||
-                 zoneCodes[0] ||
-                 forecastZone ||
-                 "").trim();
-
-            // ---- County UGC Code (MDC027, etc.)
-            const ugcList = p.geocode?.UGC;
-            const warncounty =
-                (Array.isArray(ugcList) && ugcList.length > 0)
-                    ? ugcList[0].trim()
-                    : "";
-
-            // ---- Fire weather zone (use same as warnzone unless later enhanced)
-            const firewxzone = warnzone;
-
-            // ---- Local place (keep EXACT areaDesc — do NOT split)
-            const local_place1_raw = (p.areaDesc || locationName || "").trim();
+            const local_place1_raw = (p.areaDesc || "").trim();
             const local_place1 = encodeURIComponent(local_place1_raw);
-
-            // ---- Product/Event (e.g., "Frost Advisory")
             const product1 = encodeURIComponent(p.event || "");
 
-            // ---- Coordinates (rounded is fine)
             const latStr = Number(lat).toFixed(4);
             const lonStr = Number(lon).toFixed(4);
 
-            // ---- Final, correct human-facing URL (the one you actually want)
-            const renderedUrl =
+            const url =
                 `https://forecast.weather.gov/showsigwx.php?` +
-                `warnzone=${warnzone}` +
-                (warncounty ? `&warncounty=${warncounty}` : "") +
+                `warnzone=${forecastZone}` +
+                `&warncounty=${countyCode}` +
                 `&firewxzone=${firewxzone}` +
                 (local_place1 ? `&local_place1=${local_place1}` : "") +
                 (product1 ? `&product1=${product1}` : "") +
@@ -190,14 +153,12 @@ console.groupEnd();
             return {
                 headline: p.headline,
                 severity: p.severity,
-                url: renderedUrl,
-                event: p.event,
-                onset: p.onset,
-                ends: p.ends
+                url,
+                event: p.event
             };
         });
-    } catch (error) {
-        console.warn("Alert fetch failed", error);
+    } catch (err) {
+        console.warn("Failed to fetch alerts:", err);
         return [];
     }
 }
