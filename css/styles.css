@@ -132,13 +132,6 @@ main {
     min-height: 1.2rem;
 }
 
-.loading {
-    text-align: center;
-    padding: 3rem;
-    font-size: 1.2rem;
-    color: var(--text-secondary);
-}
-
 .error-global {
     background-color: var(--error-color);
     color: white;
