@@ -1,4 +1,3 @@
-cat > js/api.js << 'EOF'
 var API_TIMEOUT = 5000;
 
 /**
@@ -202,4 +201,3 @@ async function fetchNWSAlerts(lat, lon) {
         return [];
     }
 }
-EOF
