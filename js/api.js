@@ -1,5 +1,4 @@
-cat > js/api.js << 'EOF'
-const API_TIMEOUT = 5000;
+var API_TIMEOUT = 5000;
 
 /**
  * Fetch with timeout
@@ -176,4 +175,3 @@ async function fetchNWSAlerts(lat, lon) {
         return [];
     }
 }
-EOF
