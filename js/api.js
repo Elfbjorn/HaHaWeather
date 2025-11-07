@@ -127,7 +127,22 @@ async function fetchNWSAlerts(lat, lon, forecastZone, locationName = '') {
         if (!response.ok) return [];
 
         const data = await response.json();
-        const alerts = data.features || [];
+
+const alerts = data.features || [];
+
+// DEBUG: log raw alerts to see actual zone/county fields returned
+console.groupCollapsed(`[NWS Alerts] for ${lat}, ${lon}`);
+alerts.forEach((a, i) => {
+    console.log(`Alert #${i}:`, {
+        event: a.properties?.event,
+        areaDesc: a.properties?.areaDesc,
+        affectedZones: a.properties?.affectedZones,
+        UGC: a.properties?.geocode?.UGC,
+        geocode: a.properties?.geocode
+    });
+});
+console.groupEnd();
+
 
         return alerts.map(alert => {
             const p = alert.properties || {};
