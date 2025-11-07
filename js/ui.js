@@ -107,6 +107,13 @@ function formatDateLabel(date) {
     return date.toLocaleDateString('en-US', options);
 }
 
+function clearInputError(index) {
+    const errorElement = document.getElementById(`error-${index + 1}`);
+    if (errorElement) {
+        errorElement.textContent = '';
+    }
+}
+
 function showError(message, inputIndex = null) {
     if (inputIndex !== null) {
         const errorElement = document.getElementById(`error-${inputIndex + 1}`);
