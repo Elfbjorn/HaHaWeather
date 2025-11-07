@@ -134,30 +134,39 @@
 
   // ---------- Alerts (zone-first, county fallback) ----------
   // Returns array of GeoJSON features
-  async function fetchNWSAlerts(lat, lon, opts) {
-    opts = opts || {};
-    var includeCountyFallback = (opts.includeCountyFallback !== false); // default true
 
-    var point = opts.pointJson || await fetchNWSPoint(lat, lon);
-    var fxZone = codeFromZoneUrl(point.properties && point.properties.forecastZone);
-    var county = codeFromZoneUrl(point.properties && point.properties.county);
+async function fetchNWSAlerts(lat, lon, { pointJson }) {
+  try {
+    const props = pointJson.properties;
+    const zone   = props.forecastZone;   // For zone-based hazards
+    const county = props.county;         // For county-based hazards (freeze warnings, heat advisories, etc.)
 
-    async function getForZone(code) {
-      if (!code) return [];
-      var url = "https://api.weather.gov/alerts/active?zone=" + encodeURIComponent(code);
-      var geo = await fetchJSON(url, {}, 12000);
-      return Array.isArray(geo.features) ? geo.features : [];
+    let alerts = [];
+
+    // Try zone first (some events like marine wind / coastal)
+    if (zone) {
+      const r = await fetch(`https://api.weather.gov/alerts/active?zone=${encodeURIComponent(zone)}`);
+      if (r.ok) {
+        const j = await r.json();
+        if (Array.isArray(j.features)) alerts = alerts.concat(j.features);
+      }
     }
 
-    var features = await getForZone(fxZone);
-    if ((!features || features.length === 0) && includeCountyFallback) {
-      var countyFeatures = await getForZone(county);
-      if (countyFeatures && countyFeatures.length) features = countyFeatures;
+    // Then county fallback (Frost/Freeze/Heat/Advisory events)
+    if (county) {
+      const r2 = await fetch(`https://api.weather.gov/alerts/active?zone=${encodeURIComponent(county)}`);
+      if (r2.ok) {
+        const j2 = await r2.json();
+        if (Array.isArray(j2.features)) alerts = alerts.concat(j2.features);
+      }
     }
-    return features || [];
+
+    return alerts;
+
+  } catch (err) {
+    console.error("[api.js] fetchNWSAlerts ERROR:", err);
+    return [];
   }
-  window.fetchNWSAlerts = fetchNWSAlerts;
+}
 
-  // ---------- Smoke log ----------
-  try { console.debug("[api.js] Loaded (NWS-only)."); } catch (e) {}
-})();
+)();
