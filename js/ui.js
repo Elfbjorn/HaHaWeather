@@ -152,3 +152,9 @@ function setTheme(theme) {
         document.documentElement.setAttribute('data-theme', theme);
     }
 }
+
+function initTheme() {
+    const savedTheme = localStorage.getItem('theme') || 'system';
+    setTheme(savedTheme);
+}
+
