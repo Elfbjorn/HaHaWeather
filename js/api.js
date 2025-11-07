@@ -181,23 +181,41 @@ async function fetchNWSForecast(lat, lon) {
 /**
  * Fetch NWS active alerts
  */
+/**
+ * Fetch NWS active alerts (human-friendly rendered URLs)
+ */
 async function fetchNWSAlerts(lat, lon) {
     try {
         const url = `https://api.weather.gov/alerts/active?point=${lat},${lon}`;
         const response = await fetchWithTimeout(url, {
             headers: { 'User-Agent': 'WeatherCompareApp' }
         });
-        
+
         if (!response.ok) return [];
-        
+
         const data = await response.json();
-        return data.features.map(feature => ({
-            headline: feature.properties.headline,
-            severity: feature.properties.severity,
-            url: feature.properties.url || feature.id || `https://www.weather.gov/`
-        }));
+
+        return data.features.map(feature => {
+            // Example affectedZones entry:
+            // "https://api.weather.gov/zones/forecast/MDZ506"
+            const zones = feature.properties.affectedZones || [];
+            const primaryZone = zones.length > 0 ? zones[0].split('/').pop() : null;
+
+            // Build a *human-facing* NWS alert page (NOT the JSON endpoint)
+            const renderedUrl = primaryZone
+                ? `https://forecast.weather.gov/showsigwx.php?warnzone=${primaryZone}`
+                : `https://www.weather.gov/`;
+
+            return {
+                headline: feature.properties.headline,
+                severity: feature.properties.severity,
+                url: renderedUrl
+            };
+        });
+
     } catch (error) {
         console.warn('Alert fetch failed', error);
         return [];
     }
 }
+
