@@ -167,6 +167,4 @@ async function fetchNWSAlerts(lat, lon, { pointJson }) {
     console.error("[api.js] fetchNWSAlerts ERROR:", err);
     return [];
   }
-}
-
-)();
+})();
