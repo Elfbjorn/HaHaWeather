@@ -181,8 +181,26 @@ function setTheme(theme) {
     }
 }
 
+// ---------------- THEME SYSTEM ----------------
+
+function applyTheme(theme) {
+    if (theme === 'system') {
+        document.documentElement.removeAttribute('data-theme');
+        localStorage.removeItem('theme');
+    } else {
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('theme', theme);
+    }
+}
+
 function initTheme() {
-    const savedTheme = localStorage.getItem('theme') || 'system';
-    setTheme(savedTheme);
+    const saved = localStorage.getItem('theme') || 'system';
+    applyTheme(saved);
+
+    document.getElementById('theme-light')?.addEventListener('click', () => applyTheme('light'));
+    document.getElementById('theme-dark')?.addEventListener('click', () => applyTheme('dark'));
+    document.getElementById('theme-system')?.addEventListener('click', () => applyTheme('system'));
+
+    console.log(`Theme initialized: ${saved}`);
 }
 
