@@ -31,68 +31,72 @@ async function initApp() {
     }
 }
 
-
 async function updateLocation(index) {
-    const input = document.getElementById(`location-${index + 1}`);
-    const locationString = input?.value?.trim();
-    if (!locationString) {
-        showError('Please enter a city name or ZIP code', index);
-        return;
-    }
+  try {
+    const query = locationInputs[index].value.trim();
+    const geo = await geocodeLocation(query);
 
-    console.log(`[APP] updateLocation(${index}) start -> "${locationString}"`);
-    showLoading(); // always call showLoading synchronously
+    console.log("[APP] geocoded:", geo);
 
-    try {
-        clearInputError(index);
-
-        // Important: propagate any errors to the caller (do not swallow)
-        const locationInfo = await geocodeLocation(locationString);
-        await setLocation(index, locationInfo);
-
-        // success: update the input with canonical name
-        input.value = locationInfo.name;
-        console.log(`[APP] updateLocation(${index}) succeeded`);
-    } catch (err) {
-        // Log the actual error so we can debug root cause
-        console.error(`[APP] updateLocation(${index}) ERROR:`, err);
-        // Surface the error to the user (do not hide it)
-        showError(err.message || 'Unknown error', index);
-        // rethrow is optional; we keep it as handled here but not masked
-    } finally {
-        // Always hide loading. Finally always runs even after exceptions.
-        hideLoading();
-        console.log(`[APP] updateLocation(${index}) end`);
-    }
-}
-
-async function setLocation(index, locationInfo) {
-    console.log(`[APP] setLocation(${index}) start for`, locationInfo);
-    // Do not call showLoading/hideLoading here — handled at the caller.
-    // Fetch forecast and extract periods + zone
-    const { periods, forecastZone } = await fetchNWSForecast(locationInfo.lat, locationInfo.lon);
-
-    const forecast = Array.isArray(periods) ? periods : [];
-    const alerts = await fetchNWSAlerts(locationInfo.lat, locationInfo.lon, forecastZone, locationInfo.name);
-
-    // compute daily aggregates — this expects an array; we already validated
-    const dailyData = getDailyRealFeelRange(forecast);
-
-    // store everything atomically
-    appState.locations[index] = {
-        ...locationInfo,
-        forecast,
-        forecastZone,
-        alerts,
-        dailyData,
-        index
+    // Pass ONLY the geocoded info.
+    const loc = {
+      lat: geo.lat,
+      lon: geo.lon,
+      label: geo.label
     };
 
-    console.log(`[APP] setLocation(${index}) stored location, rendering table`);
-    renderWeatherTable(appState.locations.filter(l => l !== null));
-    saveLocationsToCookie();
-    console.log(`[APP] setLocation(${index}) done`);
+    await setLocation(index, loc);
+
+  } catch (err) {
+    console.error("[APP] updateLocation ERROR:", err);
+    hideLoading();
+  }
 }
+
+
+async function setLocation(index, locationInfo) {
+  console.log(`[APP] setLocation(${index}) start for`, locationInfo);
+
+  // 1) Fetch forecast package
+  const forecastData = await fetchNWSForecast(locationInfo.lat, locationInfo.lon);
+
+  // Extract the periods array
+  const periods =
+    forecastData.forecast &&
+    forecastData.forecast.properties &&
+    Array.isArray(forecastData.forecast.properties.periods)
+      ? forecastData.forecast.properties.periods
+      : [];
+
+  // Extract zone for alerts
+  const forecastZone = forecastData.point &&
+                      forecastData.point.properties &&
+                      forecastData.point.properties.forecastZone;
+
+  // 2) Fetch alerts
+  const alerts = await fetchNWSAlerts(locationInfo.lat, locationInfo.lon, { pointJson: forecastData.point });
+
+  // 3) Compute daily aggregates (unchanged)
+  const dailyData = getDailyRealFeelRange(periods);
+
+  // 4) Store final enriched object
+  appState.locations[index] = {
+    ...locationInfo,
+    city: forecastData.city,
+    state: forecastData.state,
+    periods,
+    forecastZone,
+    alerts,
+    dailyData,
+    index
+  };
+
+  console.log(`[APP] setLocation(${index}) stored location, rendering table`);
+  renderWeatherTable(appState.locations.filter(l => l !== null));
+  saveLocationsToCookie();
+  console.log(`[APP] setLocation(${index}) done`);
+}
+
 
 // ---------------- COOKIE STORAGE ----------------
 
