@@ -36,10 +36,10 @@ async function updateLocation(index) {
 }
 
 async function setLocation(index, locationInfo) {
-    const forecastResult = await fetchNWSForecast(locationInfo.lat, locationInfo.lon);
+    const { periods, forecastZone } = await fetchNWSForecast(locationInfo.lat, locationInfo.lon);
 
-    const forecast = forecastResult.periods;
-    const forecastZone = forecastResult.forecastZone;
+    // Ensure forecast is a valid array before doing anything else
+    const forecast = Array.isArray(periods) ? periods : [];
 
     const alerts = await fetchNWSAlerts(locationInfo.lat, locationInfo.lon, forecastZone);
 
