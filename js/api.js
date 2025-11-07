@@ -48,11 +48,43 @@ async function getUserLocation() {
 }
 
 /**
- * Geocode city name or ZIP code
+ * Check if input is a ZIP code
  */
-async function geocodeLocation(input) {
+function isZipCode(input) {
+    return /^\d{5}(-\d{4})?$/.test(input.trim());
+}
+
+/**
+ * Geocode ZIP code using zippopotam.us
+ */
+async function geocodeZipCode(zip) {
     try {
-        const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(input)}&count=1&language=en&format=json`;
+        const response = await fetchWithTimeout(`https://api.zippopotam.us/us/${zip}`);
+        
+        if (!response.ok) {
+            throw new Error('ZIP code not found');
+        }
+        
+        const data = await response.json();
+        const place = data.places[0];
+        
+        return {
+            name: `${place['place name']}, ${place['state abbreviation']}`,
+            lat: parseFloat(place.latitude),
+            lon: parseFloat(place.longitude),
+            state: place.state
+        };
+    } catch (error) {
+        throw new Error(`Invalid ZIP code: ${zip}`);
+    }
+}
+
+/**
+ * Geocode city name using Open-Meteo
+ */
+async function geocodeCityName(cityName) {
+    try {
+        const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&count=5&language=en&format=json`;
         const response = await fetchWithTimeout(url);
         
         if (!response.ok) throw new Error('Geocoding failed');
@@ -62,15 +94,30 @@ async function geocodeLocation(input) {
             throw new Error('Location not found');
         }
         
-        const result = data.results[0];
+        // Prioritize US results
+        const usResult = data.results.find(r => r.country_code === 'US') || data.results[0];
+        
         return {
-            name: `${result.name}, ${result.admin1 || result.country}`,
-            lat: result.latitude,
-            lon: result.longitude,
-            state: result.admin1
+            name: `${usResult.name}, ${usResult.admin1 || usResult.country}`,
+            lat: usResult.latitude,
+            lon: usResult.longitude,
+            state: usResult.admin1
         };
     } catch (error) {
-        throw new Error(`Unable to find location: ${input}`);
+        throw new Error(`Unable to find location: ${cityName}`);
+    }
+}
+
+/**
+ * Geocode city name or ZIP code
+ */
+async function geocodeLocation(input) {
+    const cleanInput = input.trim();
+    
+    if (isZipCode(cleanInput)) {
+        return await geocodeZipCode(cleanInput.substring(0, 5));
+    } else {
+        return await geocodeCityName(cleanInput);
     }
 }
 
