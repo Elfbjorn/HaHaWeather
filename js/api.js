@@ -131,8 +131,11 @@ async function fetchNWSAlerts(lat, lon, forecastZone, locationName = '') {
         const warnzone = (zones.find(z => z === forecastZone) || zones[0] || forecastZone || '').trim();
 
         // County (UGC) (e.g., MDC027)
-        const ugcList = (p.geocode && Array.isArray(p.geocode.UGC)) ? p.geocode.UGC : [];
-        const warncounty = (ugcList[0] || '').trim();
+	const ugc = p.geocode?.UGC;
+	const warncounty = (Array.isArray(ugc) && ugc.length > 0) ? ugc[0].trim() : "";
+
+
+
 
         // Fire weather zone: if the alert lists any fire zones separately you could parse them;
         // in most cases using the same zone is acceptable.
@@ -140,7 +143,8 @@ async function fetchNWSAlerts(lat, lon, forecastZone, locationName = '') {
 
         // Place label
         const local_place1_raw = (p.areaDesc || locationName || '').trim();
-        const local_place1 = encodeURIComponent(local_place1_raw);
+	const local_place1 = encodeURIComponent(p.areaDesc || locationName || "");
+
 
         // Product / event (e.g., "Frost Advisory")
         const product1 = encodeURIComponent(p.event || '');
