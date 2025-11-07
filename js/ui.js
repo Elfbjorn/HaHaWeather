@@ -195,23 +195,36 @@ function renderWeatherTable(locationsInput) {
         const alertsForLoc = Array.isArray(loc.alerts) ? loc.alerts : [];
         const alertForDay = alertsForLoc.find(a => alertAppliesOnDate(a, dateKey));
 
-	let alertHtml = "";
-	
-	if (alertForDay && alertForDay.properties) {
-	  const link  = alertForDay.properties.link || alertForDay.properties.url || "";
-	  const title = alertForDay.properties.headline || alertForDay.properties.event || "Weather Alert";
-	
-	  if (link) {
-	    alertHtml = `<a class="alert-icon alert-clickable"
-	      href="${escapeHtml(link)}"
-	      target="_blank"
-	      rel="noopener noreferrer"
-	      title="${escapeHtml(title)}">⚠️</a>`;
-	  } else {
-	    alertHtml = `<span class="alert-icon"
-	      title="${escapeHtml(title)}">⚠️</span>`;
-	  }
-	}
+let alertHtml = "";
+
+if (alertForDay && alertForDay.properties) {
+  const p = alertForDay.properties;
+
+  // Proper NWS URL selection
+  const link =
+    p['@id'] ||
+    p.id ||
+    p.link ||
+    p.url ||
+    "";
+
+  const title =
+    p.headline ||
+    p.event ||
+    "Weather Alert";
+
+  if (link) {
+    alertHtml = `<a class="alert-icon alert-clickable"
+      href="${escapeHtml(link)}"
+      target="_blank"
+      rel="noopener noreferrer"
+      title="${escapeHtml(title)}">⚠️</a>`;
+  } else {
+    alertHtml = `<span class="alert-icon"
+      title="${escapeHtml(title)}">⚠️</span>`;
+  }
+}
+
 
 	const main = renderWeatherCell(day, period);
 	
