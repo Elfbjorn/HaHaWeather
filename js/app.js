@@ -54,11 +54,6 @@ async function setLocation(index, locationInfo) {
     // Fetch forecast and extract periods + zone
     const { periods, forecastZone } = await fetchNWSForecast(locationInfo.lat, locationInfo.lon);
 
-    if (!forecastResult || !Array.isArray(forecastResult.periods)) {
-        // Throw so caller's catch can handle and we don't proceed with bad data
-        throw new Error('Invalid forecast data returned from NWS');
-    }
-
     const forecast = Array.isArray(periods) ? periods : [];
     const alerts = await fetchNWSAlerts(locationInfo.lat, locationInfo.lon, forecastZone, locationInfo.name);
 
