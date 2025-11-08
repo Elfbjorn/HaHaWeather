@@ -82,26 +82,40 @@ function normalizeDailyMap(dailyData) {
  * Priority: the first location with dailyData; if absent, derive from periods.
  */
 function deriveDateKeys(locations) {
-  // 1) Prefer dailyData from first location that has it
+  // 1. Existing logic (unchanged)
   for (const loc of locations) {
     const dm = normalizeDailyMap(loc && loc.dailyData);
     const keys = Object.keys(dm || {});
-    if (keys.length) return keys.sort();
+    if (keys.length) {
+
+      // ✅ NEW: filter out past days
+      const todayKey = formatDateKey(new Date());
+      return keys
+        .filter(k => k >= todayKey)
+        .sort();
+    }
   }
-  // 2) Fallback to period start dates
+
   for (const loc of locations) {
     if (loc && Array.isArray(loc.periods) && loc.periods.length) {
       const map = {};
       for (const p of loc.periods) {
-        const k = formatDateKey(p.startTime || p.start || p.validTime || p.date || new Date());
+        const k = formatDateKey(p.startTime || p.start || p.date || new Date());
         map[k] = true;
       }
       const keys = Object.keys(map);
-      if (keys.length) return keys.sort();
+
+      // ✅ NEW: filter out past days
+      const todayKey = formatDateKey(new Date());
+      return keys
+        .filter(k => k >= todayKey)
+        .sort();
     }
   }
+
   return [];
 }
+
 
 /* =========================
    Cell rendering
