@@ -161,6 +161,13 @@ main {
     border: 1px solid var(--border-color);
 }
 
+.weather-table th.date-col {
+  background: #d9e8ff;     /* soft blue */
+  font-weight: 600;
+  text-align: left;        /* per your choice */
+  padding-left: 6px;
+}
+
 .weather-table th {
     background-color: var(--accent-color);
     color: white;

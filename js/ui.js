@@ -173,14 +173,19 @@ function renderWeatherTable(locationsInput) {
     let html = '<table class="forecast-table"><thead><tr>';
     html += '<th class="date-col">Date</th>';
 
-    for (let i = 0; i < 3; i++) {
-      const loc = locations[i];
-      let headerLabel = "undefined";
-      if (loc) {
-        headerLabel = loc.city ? `${loc.city}, ${loc.state}` : (loc.label || "Unknown");
-      }
+    // Filter to only real locations
+    const activeLocations = locations.filter(loc => loc && (loc.city || loc.state || loc.label));
+    
+    // Build header for only real, defined locations
+    for (let i = 0; i < activeLocations.length; i++) {
+      const loc = activeLocations[i];
+      const headerLabel = (loc.city && loc.state)
+        ? `${loc.city}, ${loc.state}`
+        : (loc.label || "");
+    
       html += `<th class="loc-col loc-${i}">${escapeHtml(headerLabel)}</th>`;
     }
+   
     html += '</tr></thead><tbody>';
 
     // Build body rows
@@ -188,7 +193,7 @@ function renderWeatherTable(locationsInput) {
       html += `<tr class="date-row" data-date="${dateKey}">`;
       html += `<td class="date-cell"><strong>${escapeHtml(formatDateLabel(dateKey))}</strong></td>`;
 
-      for (let col = 0; col < 3; col++) {
+      for (let col = 0; col < activeLocations.length; col++) {
         const loc = locations[col];
 
         if (!loc) {
