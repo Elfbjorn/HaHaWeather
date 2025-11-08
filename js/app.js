@@ -94,21 +94,12 @@ async function setLocation(index, locationInfo) {
     ...locationInfo,
     city: displayCity,
     state: displayState,
-
-
-  // Store enriched location object
-/*
-  appState.locations[index] = {
-    ...locationInfo,
-    city: forecastData.city,
-    state: forecastData.state,
     periods,
     forecastZone,
     alerts,
     dailyData,
     index
   };
-*/
 
   console.log(`[APP] setLocation(${index}) stored location, rendering table`);
   renderWeatherTable(appState.locations.filter(Boolean));
