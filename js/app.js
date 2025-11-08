@@ -87,7 +87,17 @@ async function setLocation(index, locationInfo) {
   // Compute daily aggregates
   const dailyData = getDailyRealFeelRange(periods);
 
+  const displayCity = forecastData.city || locationInfo.label || "";
+  const displayState = forecastData.state || "";
+  
+  appState.locations[index] = {
+    ...locationInfo,
+    city: displayCity,
+    state: displayState,
+
+
   // Store enriched location object
+/*
   appState.locations[index] = {
     ...locationInfo,
     city: forecastData.city,
@@ -98,6 +108,7 @@ async function setLocation(index, locationInfo) {
     dailyData,
     index
   };
+*/
 
   console.log(`[APP] setLocation(${index}) stored location, rendering table`);
   renderWeatherTable(appState.locations.filter(Boolean));
