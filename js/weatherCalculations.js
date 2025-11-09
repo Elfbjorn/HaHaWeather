@@ -84,13 +84,11 @@ function toFahrenheit(value, unitCode) {
 }
 
 function getDailyRealFeelRange(periods) {
-  const daily = {};
-
-  periods.forEach(p => {
-    const date = String(p.startTime || '').split('T')[0] || 'unknown';
-    if (!daily[date]) {
-      daily[date] = { realFeels: [], highs: [], lows: [] };
-    }
+    // Group periods by calendar date (LOCAL, not UTC)
+    const dailyData = {};
+    
+    periods.forEach(period => {
+        const date = formatDateKey(period.startTime);  // ✅ LOCAL DATE, NOT SPLIT UTC
 
     // Temperature (°F)
     const tempF = Number(p.temperature);

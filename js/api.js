@@ -137,48 +137,68 @@
 
   // ---------- Alerts (zone-first, county fallback) ----------
   // Returns array of GeoJSON features
-  async function fetchNWSAlerts(lat, lon, { pointJson }) {
+async function fetchNWSAlerts(lat, lon, { pointJson }) {
+  const alerts = [];
+
+  try {
+    //
+    // 1. Best-first: point-based lookup (ALWAYS accurate to the user's exact spot)
+    //
     try {
-      const props = pointJson.properties || {};
-      const zoneUrl   = props.forecastZone;
-      const countyUrl = props.county;
-
-      const zoneCode   = codeFromZoneUrl(zoneUrl);
-      const countyCode = codeFromZoneUrl(countyUrl);
-
-      let alerts = [];
-
-      // Zone-based hazards (wind, coastal, winter storm watches, etc.)
-      if (zoneCode) {
-        try {
-          const j = await fetchJSON(
-            `https://api.weather.gov/alerts/active?zone=${encodeURIComponent(zoneCode)}`
-          );
-          if (j && Array.isArray(j.features)) alerts = alerts.concat(j.features);
-        } catch (e) {
-          console.warn("[api] zone alerts failed", zoneCode, e);
-        }
+      const j = await fetchJSON(
+        `https://api.weather.gov/alerts/active?point=${lat},${lon}`
+      );
+      if (j && Array.isArray(j.features)) {
+        alerts.push(...j.features);
       }
-
-      // County-based alerts (Freeze Warning, Heat Advisory, Air Quality Alerts, etc.)
-      if (countyCode) {
-        try {
-          const j2 = await fetchJSON(
-            `https://api.weather.gov/alerts/active?zone=${encodeURIComponent(countyCode)}`
-          );
-          if (j2 && Array.isArray(j2.features)) alerts = alerts.concat(j2.features);
-        } catch (e) {
-          console.warn("[api] county alerts failed", countyCode, e);
-        }
-      }
-
-      return alerts;
-    } catch (err) {
-      console.error("[api] fetchNWSAlerts ERROR:", err);
-      return [];
+    } catch (e) {
+      console.warn("[api] point-based alerts failed:", e.message);
     }
+
+    //
+    // 2. Optional: zone & county expansion (usually redundant after point=)
+    //
+    const props = pointJson.properties || {};
+    const zoneCode   = codeFromZoneUrl(props.forecastZone);
+    const countyCode = codeFromZoneUrl(props.county);
+
+    if (zoneCode) {
+      try {
+        const jz = await fetchJSON(
+          `https://api.weather.gov/alerts/active?zone=${encodeURIComponent(zoneCode)}`
+        );
+        if (jz && Array.isArray(jz.features)) alerts.push(...jz.features);
+      } catch (e) {
+        console.warn("[api] zone alerts failed:", zoneCode, e.message);
+      }
+    }
+
+    if (countyCode) {
+      try {
+        const jc = await fetchJSON(
+          `https://api.weather.gov/alerts/active?zone=${encodeURIComponent(countyCode)}`
+        );
+        if (jc && Array.isArray(jc.features)) alerts.push(...jc.features);
+      } catch (e) {
+        console.warn("[api] county alerts failed:", countyCode, e.message);
+      }
+    }
+
+  } catch (e) {
+    console.error("[api] fetchNWSAlerts ERROR:", e);
   }
-  window.fetchNWSAlerts = fetchNWSAlerts;
+
+  // ✅ Remove duplicates by ID (happens because point + zone often overlap)
+  const seen = new Set();
+  return alerts.filter(a => {
+    const id = a.id || a.properties.id || JSON.stringify(a);
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+window.fetchNWSAlerts = fetchNWSAlerts;
+
 
 })(); // <--- THIS WAS MISSING!!!
 
