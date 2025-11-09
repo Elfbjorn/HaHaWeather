@@ -81,39 +81,35 @@ function normalizeDailyMap(dailyData) {
  * Extracts a canonical list of date keys we will render as rows.
  * Priority: the first location with dailyData; if absent, derive from periods.
  */
+
 function deriveDateKeys(locations) {
-  // 1. Existing logic (unchanged)
+  const keySet = new Set();
+  const todayKey = formatDateKey(new Date()); // YYYY-MM-DD aligned with your existing formatting
+
+  // Pass 1: dailyData (if present)
   for (const loc of locations) {
     const dm = normalizeDailyMap(loc && loc.dailyData);
-    const keys = Object.keys(dm || {});
-    if (keys.length) {
-
-      // ✅ NEW: filter out past days
-      const todayKey = formatDateKey(new Date());
-      return keys
-        .filter(k => k >= todayKey)
-        .sort();
+    if (dm) {
+      Object.keys(dm).forEach(k => keySet.add(k));
     }
   }
 
-  for (const loc of locations) {
-    if (loc && Array.isArray(loc.periods) && loc.periods.length) {
-      const map = {};
-      for (const p of loc.periods) {
-        const k = formatDateKey(p.startTime || p.start || p.date || new Date());
-        map[k] = true;
+  // Pass 2: raw periods fallback (if needed)
+  if (keySet.size === 0) {
+    for (const loc of locations) {
+      if (loc && Array.isArray(loc.periods)) {
+        for (const p of loc.periods) {
+          const k = formatDateKey(p.startTime || p.start || p.date || new Date());
+          keySet.add(k);
+        }
       }
-      const keys = Object.keys(map);
-
-      // ✅ NEW: filter out past days
-      const todayKey = formatDateKey(new Date());
-      return keys
-        .filter(k => k >= todayKey)
-        .sort();
     }
   }
 
-  return [];
+  // Filter to today and future + sort
+  return Array.from(keySet)
+    .filter(k => k >= todayKey)   // ✅ removes yesterday & anything earlier
+    .sort();                      // ✅ ensures correct chronological order
 }
 
 
