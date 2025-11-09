@@ -24,7 +24,13 @@ function pad2(n) { return String(n).padStart(2, "0"); }
 
 function formatDateKey(dateLike) {
   const d = new Date(dateLike);
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  return (
+    d.getFullYear() +
+    "-" +
+    String(d.getMonth() + 1).padStart(2, "0") +
+    "-" +
+    String(d.getDate()).padStart(2, "0")
+  );
 }
 
 function formatDateLabel(dateLike) {
