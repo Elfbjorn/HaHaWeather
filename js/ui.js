@@ -24,6 +24,9 @@ function pad2(n) { return String(n).padStart(2, "0"); }
 
 function formatDateKey(dateLike) {
   const d = new Date(dateLike);
+  
+  console.log("[UI] formatDateKey: " + d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"));
+  
   return (
     d.getFullYear() +
     "-" +
