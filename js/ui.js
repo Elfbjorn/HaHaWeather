@@ -96,12 +96,11 @@ function normalizeDailyMap(dailyData) {
  * Extracts a canonical list of date keys we will render as rows.
  * Priority: the first location with dailyData; if absent, derive from periods.
  */
-
 function deriveDateKeys(locations) {
   const keySet = new Set();
-  const todayKey = formatDateKey(new Date()); // YYYY-MM-DD aligned with your existing formatting
+  const todayLocal = formatDateKey(new Date()); // Local YYYY-MM-DD
 
-  // Pass 1: dailyData (if present)
+  // Pass 1: Use dailyData if present
   for (const loc of locations) {
     const dm = normalizeDailyMap(loc && loc.dailyData);
     if (dm) {
@@ -109,7 +108,7 @@ function deriveDateKeys(locations) {
     }
   }
 
-  // Pass 2: raw periods fallback (if needed)
+  // Pass 2 (fallback): derive from periods only if needed
   if (keySet.size === 0) {
     for (const loc of locations) {
       if (loc && Array.isArray(loc.periods)) {
@@ -121,20 +120,11 @@ function deriveDateKeys(locations) {
     }
   }
 
-  console.log("[UI] FINAL DATE KEYS:", Array.from(new Set(keys)).sort());
-
-  const todayLocal = formatDateKey(new Date());
-  
-  return Array.from(new Set(keys))
-    .filter(k => k >= todayLocal)   // enforce local cutoff **after** flattening
+  // ✅ NOW filter out past days using local time reference
+  return Array.from(keySet)
+    .filter(k => k >= todayLocal)
     .sort();
-
-  // Filter to today and future + sort
-  //return Array.from(keySet)
-  //  .filter(k => k >= todayKey)   // ✅ removes yesterday & anything earlier
-  //  .sort();                      // ✅ ensures correct chronological order
 }
-
 
 /* =========================
    Cell rendering
