@@ -259,6 +259,7 @@ if (alertForDay && alertForDay.properties) {
   if (zoneCode && countyCode && lat && lon) {
     // NWS expects spaces as %20 in local_place1, + in product1
     forecastUrl = `https://forecast.weather.gov/showsigwx.php?warnzone=${encode(zoneCode)}&warncounty=${encode(countyCode)}&firewxzone=${encode(fireWxZone)}&local_place1=${encode(localPlace1)}&product1=${encode(product1).replace(/%20/g, '+')}&lat=${encode(lat)}&lon=${encode(lon)}`;
+    console.log("[UI] forecastUrl: " + forecastUrl);
   }
 
   // Prefer the forecast/alert page if possible, else fallback to JSON
