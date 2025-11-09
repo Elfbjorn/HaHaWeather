@@ -240,87 +240,51 @@ function renderWeatherTable(locationsInput) {
         console.log(`[UI] Checking alerts for ${dateKey}, col ${col}:`, alertsForLoc.length, 'alerts');
         const alertForDay = alertsForLoc.find(a => alertAppliesOnDate(a, dateKey));
         
-if (alertForDay && alertForDay.properties) {
-  const p = alertForDay.properties;
+        let alertHtml = "";
 
-  // Gather context for building a more user-friendly NWS product URL
-  const zoneCode = p.zoneId || p.zone || p.geocode?.UGC?.[0] || ''; // Try to get forecast zone
-  const countyCode = p.county || p.geocode?.FIPS6?.[0] || ''; // Try to get county code
-  const fireWxZone = zoneCode; // usually same as forecast zone
-  const localPlace1 = loc.city ? `${loc.city} ${loc.state}` : loc.label;
-  const product1 = p.event || p.headline || "Weather Alert";
-  const lat = loc.lat || p.areaDesc?.lat || '';
-  const lon = loc.lon || p.areaDesc?.lon || '';
+        if (alertForDay && alertForDay.properties) {
+          const p = alertForDay.properties;
 
-  // Fallback to event and city if missing lat/lon (should be present in loc object)
-  // URL-encode values (especially headline and place)
-  function encode(val) {
-    return encodeURIComponent(val || '');
-  }
+          // Try to build a friendly NWS product URL if enough info is available
+          const zoneCode = p.zoneId || p.zone || (p.geocode && p.geocode.UGC && p.geocode.UGC[0]) || '';
+          const countyCode = p.county || (p.geocode && p.geocode.FIPS6 && p.geocode.FIPS6[0]) || '';
+          const fireWxZone = zoneCode;
+          const localPlace1 = (loc.city ? `${loc.city} ${loc.state}` : loc.label) || "";
+          const product1 = p.event || p.headline || "Weather Alert";
+          const lat = loc.lat || (p.areaDesc && p.areaDesc.lat) || '';
+          const lon = loc.lon || (p.areaDesc && p.areaDesc.lon) || '';
+          function encode(val) { return encodeURIComponent(val || ''); }
 
-  let forecastUrl = '';
-  if (zoneCode && countyCode && lat && lon) {
-    forecastUrl = `https://forecast.weather.gov/showsigwx.php?warnzone=${encode(zoneCode)}&warncounty=${encode(countyCode)}&firewxzone=${encode(fireWxZone)}&local_place1=${encode(localPlace1)}&product1=${encode(product1)}&lat=${encode(lat)}&lon=${encode(lon)}`;
-  }
+          let forecastUrl = '';
+          if (zoneCode && countyCode && lat && lon) {
+            forecastUrl = `https://forecast.weather.gov/showsigwx.php?warnzone=${encode(zoneCode)}&warncounty=${encode(countyCode)}&firewxzone=${encode(fireWxZone)}&local_place1=${encode(localPlace1)}&product1=${encode(product1)}&lat=${encode(lat)}&lon=${encode(lon)}`;
+          }
 
-  // If we have enough info for the friendly forecast page, use it, else fallback to alert JSON
-  const link = forecastUrl || p['@id'] || p.id || p.link || p.url || "";
-  const title = p.headline || p.event || "Weather Alert";
+          // If we have enough info for the friendly forecast page, use it, else fallback to alert JSON
+          const link = forecastUrl || p['@id'] || p.id || p.link || p.url || "";
+          const title = p.headline || p.event || "Weather Alert";
 
-  if (link) {
-    alertHtml = `<a class="alert-icon alert-clickable"
-      href="${escapeHtml(link)}"
-      target="_blank"
-      rel="noopener noreferrer"
-      title="${escapeHtml(title)}">⚠️</a>`;
-  } else {
-    alertHtml = `<span class="alert-icon"
-      title="${escapeHtml(title)}">⚠️</span>`;
-  }
-}
+          if (link) {
+            alertHtml = `<a class="alert-icon alert-clickable"
+              href="${escapeHtml(link)}"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="${escapeHtml(title)}">⚠️</a>`;
+          } else {
+            alertHtml = `<span class="alert-icon"
+              title="${escapeHtml(title)}">⚠️</span>`;
+          }
+        }
 
-let alertHtml = "";
-
-if (alertForDay && alertForDay.properties) {
-  const p = alertForDay.properties;
-
-  // Proper NWS URL selection
-  const link =
-    p['@id'] ||
-    p.id ||
-    p.link ||
-    p.url ||
-    "";
-
-  const title =
-    p.headline ||
-    p.event ||
-    "Weather Alert";
-
-  console.log(`[UI] Creating alert HTML for ${dateKey}, link:`, link, 'title:', title);
-
-  if (link) {
-    alertHtml = `<a class="alert-icon alert-clickable"
-      href="${escapeHtml(link)}"
-      target="_blank"
-      rel="noopener noreferrer"
-      title="${escapeHtml(title)}">⚠️</a>`;
-  } else {
-    alertHtml = `<span class="alert-icon"
-      title="${escapeHtml(title)}">⚠️</span>`;
-  }
-}
-
-
-	const main = renderWeatherCell(day, period);
+        const main = renderWeatherCell(day, period);
 	
-	// Place alert ABOVE the icon+temps block
-	html += `<td class="forecast-cell">
-	  <div class="cell-stack">
-	    ${alertHtml ? `<div class="alert-row">${alertHtml}</div>` : ``}
-	    ${main}
-	  </div>
-	</td>`;
+        // Place alert ABOVE the icon+temps block
+        html += `<td class="forecast-cell">
+          <div class="cell-stack">
+            ${alertHtml ? `<div class="alert-row">${alertHtml}</div>` : ``}
+            ${main}
+          </div>
+        </td>`;
 
       }
 
