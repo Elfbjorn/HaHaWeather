@@ -52,16 +52,22 @@ function alertAppliesOnDate(alert, dateKey) {
   const eff = p.effective || p.onset || p.sent;
   const exp = p.expires  || p.ends;
 
-  if (!eff && !exp) return false;
+  // Local day boundary for the calendar date represented by dateKey
+  const y = Number(dateKey.slice(0, 4));
+  const m = Number(dateKey.slice(5, 7)) - 1; // zero-indexed month
+  const d = Number(dateKey.slice(8, 10));
 
-  // Build the window for the *day* represented by dateKey
-  const dayStart = new Date(`${dateKey}T00:00:00`);
-  const dayEnd   = new Date(`${dateKey}T23:59:59`);
+  const dayStart = new Date(y, m, d, 0, 0, 0);     // local midnight
+  const dayEnd   = new Date(y, m, d, 23, 59, 59);  // local 23:59:59
 
-  // Missing start/end handling:
-  const start = eff ? new Date(eff) : new Date(dayStart);
-  const end   = exp ? new Date(exp) : new Date(dayEnd);
+  // Parse alert timestamps normally (they include timezone offsets)
+  const start = eff ? new Date(eff) : dayStart;
+  const end   = exp ? new Date(exp) : dayEnd;
 
+  console.log("[DEBUG] Alert Effective:", eff, "Parsed:", new Date(eff));
+  console.log("[DEBUG] Alert Applies On:", dateKey, "=>", alertAppliesOnDate(alert, dateKey));
+
+  // Overlap logic: alert applies if the date range intersects
   return (dayStart <= end) && (dayEnd >= start);
 }
 
@@ -115,10 +121,18 @@ function deriveDateKeys(locations) {
     }
   }
 
+  console.log("[UI] FINAL DATE KEYS:", Array.from(new Set(keys)).sort());
+
+  const todayLocal = formatDateKey(new Date());
+  
+  return Array.from(new Set(keys))
+    .filter(k => k >= todayLocal)   // enforce local cutoff **after** flattening
+    .sort();
+
   // Filter to today and future + sort
-  return Array.from(keySet)
-    .filter(k => k >= todayKey)   // ✅ removes yesterday & anything earlier
-    .sort();                      // ✅ ensures correct chronological order
+  //return Array.from(keySet)
+  //  .filter(k => k >= todayKey)   // ✅ removes yesterday & anything earlier
+  //  .sort();                      // ✅ ensures correct chronological order
 }
 
 
