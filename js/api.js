@@ -98,58 +98,86 @@
     }
   }
 
-function codeFromZoneUrl(zoneUrl) {
-  if (!zoneUrl) return null;
-  const parts = zoneUrl.split("/");
-  const last = parts[parts.length - 1];       // e.g., "WIZ064" or "C025"
-  const prev = parts[parts.length - 2];       // e.g., "WI"
+  function codeFromZoneUrl(zoneUrl) {
+    if (!zoneUrl) return null;
+    const parts = zoneUrl.split("/");
+    const last = parts[parts.length - 1];       // e.g., "WIZ064" or "C025"
+    const prev = parts[parts.length - 2];       // e.g., "WI"
 
-  // already a full zone like WIZ064 or MDC031
-  if (/^[A-Z]{3}\d{3}$/.test(last) || /^[A-Z]{2}[CZ]\d{3}$/.test(last)) {
-    return last;
+    // already a full zone like WIZ064 or MDC031
+    if (/^[A-Z]{3}\d{3}$/.test(last) || /^[A-Z]{2}[CZ]\d{3}$/.test(last)) {
+      return last;
+    }
+
+    // county form ".../WI/C025"  -> "WIC025"
+    if (/^[A-Z]{2}$/.test(prev) && /^[C|Z]\d{3}$/.test(last)) {
+      return prev + last;
+    }
+
+    return null;
   }
 
-  // county form ".../WI/C025"  -> "WIC025"
-  if (/^[A-Z]{2}$/.test(prev) && /^[C|Z]\d{3}$/.test(last)) {
-    return prev + last;
+  // ---------- NWS Forecast ----------
+  async function fetchNWSForecast(lat, lon) {
+    try {
+      const pointJson = await fetchNWSPoint(lat, lon);
+      const props = pointJson.properties || {};
+      
+      const forecastUrl = props.forecast;
+      const hourlyUrl = props.forecastHourly;
+      
+      if (!forecastUrl) {
+        throw new Error("No forecast URL in point data");
+      }
+
+      const forecast = await fetchJSON(forecastUrl);
+      const hourly = hourlyUrl ? await fetchJSON(hourlyUrl) : null;
+      
+      const cs = extractCityStateFromPoint(pointJson);
+      
+      return {
+        forecast: forecast,
+        hourly: hourly,
+        city: cs.city,
+        state: cs.state,
+        point: pointJson
+      };
+    } catch (err) {
+      console.error("[api] fetchNWSForecast ERROR:", err);
+      throw err;
+    }
   }
-
-  return null;
-}
-
   window.fetchNWSForecast = fetchNWSForecast;
 
   // ---------- Alerts (zone-first, county fallback) ----------
-  // Returns array of GeoJSON features
+  async function fetchNWSAlerts(lat, lon, { pointJson }) {
+    try {
+      const props = pointJson.properties || {};
+      const zoneCode   = codeFromZoneUrl(props.forecastZone);
+      const countyCode = codeFromZoneUrl(props.county);
 
-  // ---------- Alerts (zone-first, county fallback) ----------
-  // Returns array of GeoJSON features
-async function fetchNWSAlerts(lat, lon, { pointJson }) {
-  try {
-    const props = pointJson.properties || {};
-    const zoneCode   = codeFromZoneUrl(props.forecastZone);
-    const countyCode = codeFromZoneUrl(props.county);
+      let alerts = [];
 
-    let alerts = [];
+      if (zoneCode) {
+        try {
+          const j = await fetchJSON(`https://api.weather.gov/alerts/active/zone/${encodeURIComponent(zoneCode)}`);
+          if (j && Array.isArray(j.features)) alerts = alerts.concat(j.features);
+        } catch (e) { console.warn("[api] zone alerts failed", zoneCode, e); }
+      }
 
-    if (zoneCode) {
-      try {
-        const j = await fetchJSON(`https://api.weather.gov/alerts/active/zone/${encodeURIComponent(zoneCode)}`);
-        if (j && Array.isArray(j.features)) alerts = alerts.concat(j.features);
-      } catch (e) { console.warn("[api] zone alerts failed", zoneCode, e); }
+      if (countyCode) {
+        try {
+          const j2 = await fetchJSON(`https://api.weather.gov/alerts/active/zone/${encodeURIComponent(countyCode)}`);
+          if (j2 && Array.isArray(j2.features)) alerts = alerts.concat(j2.features);
+        } catch (e) { console.warn("[api] county alerts failed", countyCode, e); }
+      }
+
+      return alerts;
+    } catch (err) {
+      console.error("[api] fetchNWSAlerts ERROR:", err);
+      return [];
     }
-
-    if (countyCode) {
-      try {
-        const j2 = await fetchJSON(`https://api.weather.gov/alerts/active/zone/${encodeURIComponent(countyCode)}`);
-        if (j2 && Array.isArray(j2.features)) alerts = alerts.concat(j2.features);
-      } catch (e) { console.warn("[api] county alerts failed", countyCode, e); }
-    }
-
-    return alerts;
-  } catch (err) {
-    console.error("[api] fetchNWSAlerts ERROR:", err);
-    return [];
   }
-})(); // <--- THIS WAS MISSING!!!
+  window.fetchNWSAlerts = fetchNWSAlerts;
 
+})();

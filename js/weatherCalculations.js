@@ -83,31 +83,52 @@ function toFahrenheit(value, unitCode) {
   return value; // assume already °F
 }
 
+// Local helper to format date keys in this module
+function formatDateKeyLocal(dateLike) {
+  const d = new Date(dateLike);
+  return (
+    d.getFullYear() +
+    "-" +
+    String(d.getMonth() + 1).padStart(2, "0") +
+    "-" +
+    String(d.getDate()).padStart(2, "0")
+  );
+}
+
 function getDailyRealFeelRange(periods) {
-    // Group periods by calendar date (LOCAL, not UTC)
-    const dailyData = {};
+  // Group periods by calendar date (LOCAL, not UTC)
+  const daily = {};
+  
+  periods.forEach(period => {
+    const date = formatDateKeyLocal(period.startTime);
     
-    periods.forEach(period => {
-        const date = formatDateKey(period.startTime);  // ✅ LOCAL DATE, NOT SPLIT UTC
+    // Initialize the daily bucket if it doesn't exist
+    if (!daily[date]) {
+      daily[date] = {
+        realFeels: [],
+        highs: [],
+        lows: []
+      };
+    }
 
     // Temperature (°F)
-    const tempF = Number(p.temperature);
+    const tempF = Number(period.temperature);
     // Wind speed (mph)
-    const windMph = parseWindSpeedMph(p.windSpeed);
+    const windMph = parseWindSpeedMph(period.windSpeed);
     // Humidity (%)
-    const rh = clamp(p?.relativeHumidity?.value ?? 50, 0, 100);
+    const rh = clamp(period?.relativeHumidity?.value ?? 50, 0, 100);
 
     // Prefer provided apparent temperature if present & in known units
     let apparentF = null;
-    if (p.apparentTemperature != null) {
+    if (period.apparentTemperature != null) {
       // Support either { value, unitCode } or plain number
-      if (typeof p.apparentTemperature === 'object') {
+      if (typeof period.apparentTemperature === 'object') {
         apparentF = toFahrenheit(
-          p.apparentTemperature.value,
-          p.apparentTemperature.unitCode
+          period.apparentTemperature.value,
+          period.apparentTemperature.unitCode
         );
-      } else if (typeof p.apparentTemperature === 'number') {
-        apparentF = p.apparentTemperature; // assume °F
+      } else if (typeof period.apparentTemperature === 'number') {
+        apparentF = period.apparentTemperature; // assume °F
       }
     }
 
