@@ -25,8 +25,6 @@ function pad2(n) { return String(n).padStart(2, "0"); }
 function formatDateKey(dateLike) {
   const d = new Date(dateLike);
   
-  console.log("[UI] formatDateKey: " + d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"));
-  
   return (
     d.getFullYear() +
     "-" +
@@ -64,11 +62,14 @@ function alertAppliesOnDate(alert, dateKey) {
   const start = eff ? new Date(eff) : dayStart;
   const end   = exp ? new Date(exp) : dayEnd;
 
-  console.log("[DEBUG] Alert Effective:", eff, "Parsed:", new Date(eff));
-  console.log("[DEBUG] Alert Applies On:", dateKey, "=>", alertAppliesOnDate(alert, dateKey));
-
   // Overlap logic: alert applies if the date range intersects
-  return (dayStart <= end) && (dayEnd >= start);
+  const applies = (dayStart <= end) && (dayEnd >= start);
+  
+  if (applies) {
+    console.log(`[UI] Alert applies to ${dateKey}: ${p.event || p.headline || 'Alert'}`);
+  }
+  
+  return applies;
 }
 
 /**
@@ -88,7 +89,7 @@ function normalizeDailyMap(dailyData) {
     }
     return m;
   }
-  // assume it is already map keyed by YYYY-MM-DD
+  // assume it is already map keyed by YYYY-MM-DD - return as-is, don't reformat keys!
   return dailyData;
 }
 
@@ -103,7 +104,10 @@ function deriveDateKeys(locations) {
   for (const loc of locations) {
     const dm = normalizeDailyMap(loc && loc.dailyData);
     if (dm && typeof dm === "object") {
-      for (const k of Object.keys(dm)) keySet.add(formatDateKey(k));
+      // Keys are already formatted as YYYY-MM-DD, don't reformat them!
+      for (const k of Object.keys(dm)) {
+        keySet.add(k); // USE KEY DIRECTLY, don't call formatDateKey again!
+      }
     }
   }
 
@@ -119,11 +123,14 @@ function deriveDateKeys(locations) {
 
   // final filter: today and beyond only (string compare works for YYYY-MM-DD)
   const todayKey = formatDateKey(new Date());
+  console.log("[UI] Today's key for filtering:", todayKey);
+  console.log("[UI] All keys before filtering:", Array.from(keySet).sort());
+  
   const finalKeys = Array.from(keySet)
     .filter(k => k >= todayKey)
     .sort((a, b) => a.localeCompare(b));
 
-  console.log("[UI] FINAL DATE KEYS:", finalKeys);
+  console.log("[UI] FINAL DATE KEYS after filtering:", finalKeys);
   return finalKeys;
 }
 
@@ -200,6 +207,7 @@ function renderWeatherTable(locationsInput) {
     html += '</tr></thead><tbody>';
 
     // Build body rows
+    console.log("[UI] Rendering rows for dates:", dateKeys);
     for (const dateKey of dateKeys) {
       html += `<tr class="date-row" data-date="${dateKey}">`;
       html += `<td class="date-cell"><strong>${escapeHtml(formatDateLabel(dateKey))}</strong></td>`;
@@ -223,7 +231,12 @@ function renderWeatherTable(locationsInput) {
 
         // find an alert that applies for this dateKey
         const alertsForLoc = Array.isArray(loc.alerts) ? loc.alerts : [];
+        console.log(`[UI] Checking alerts for ${dateKey}, col ${col}:`, alertsForLoc.length, 'alerts');
         const alertForDay = alertsForLoc.find(a => alertAppliesOnDate(a, dateKey));
+        
+        if (alertForDay) {
+          console.log(`[UI] Found alert for ${dateKey}:`, alertForDay.properties.event || alertForDay.properties.headline);
+        }
 
 let alertHtml = "";
 
@@ -242,6 +255,8 @@ if (alertForDay && alertForDay.properties) {
     p.headline ||
     p.event ||
     "Weather Alert";
+
+  console.log(`[UI] Creating alert HTML for ${dateKey}, link:`, link, 'title:', title);
 
   if (link) {
     alertHtml = `<a class="alert-icon alert-clickable"
