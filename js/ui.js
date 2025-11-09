@@ -105,23 +105,22 @@ function deriveDateKeys(locations) {
     const dm = normalizeDailyMap(loc && loc.dailyData);
     if (dm) {
       for (const k of Object.keys(dm)) {
-        keySet.add(formatDateKey(k)); // ensure consistently local
+        keySet.add(formatDateKey(k)); // enforce local key space
       }
     }
   }
 
-  // Fallback: collect from periods if dailyData not present
+  // Fallback: collect from periods if no daily keys
   for (const loc of locations) {
     if (loc && Array.isArray(loc.periods)) {
       for (const p of loc.periods) {
         const raw = p.startTime || p.start || p.date || new Date();
-        const k = formatDateKey(raw);
-        keySet.add(k);
+        keySet.add(formatDateKey(raw));
       }
     }
   }
 
-  // Final: Convert to array, filter to today+, sort
+  // Final: filter out past days + sort
   const finalKeys = Array.from(keySet)
     .filter(k => k >= todayLocal)
     .sort();
