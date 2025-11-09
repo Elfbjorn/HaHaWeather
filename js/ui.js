@@ -271,11 +271,11 @@ if (alertForDay && alertForDay.properties) {
       target="_blank"
       rel="noopener noreferrer"
       title="${escapeHtml(title)}">⚠️</a>`;
-console.log("Warining URL: " + href);
+console.log("Warining URL: " + link);
   } else {
     alertHtml = `<span class="alert-icon"
       title="${escapeHtml(title)}">⚠️</span>`;
-console.log("Warining URL: " + href);
+console.log("Warining URL: " + link);
   }
 }
 
