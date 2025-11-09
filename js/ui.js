@@ -240,9 +240,44 @@ function renderWeatherTable(locationsInput) {
         console.log(`[UI] Checking alerts for ${dateKey}, col ${col}:`, alertsForLoc.length, 'alerts');
         const alertForDay = alertsForLoc.find(a => alertAppliesOnDate(a, dateKey));
         
-        if (alertForDay) {
-          console.log(`[UI] Found alert for ${dateKey}:`, alertForDay.properties.event || alertForDay.properties.headline);
-        }
+if (alertForDay && alertForDay.properties) {
+  const p = alertForDay.properties;
+
+  // Gather context for building a more user-friendly NWS product URL
+  const zoneCode = p.zoneId || p.zone || p.geocode?.UGC?.[0] || ''; // Try to get forecast zone
+  const countyCode = p.county || p.geocode?.FIPS6?.[0] || ''; // Try to get county code
+  const fireWxZone = zoneCode; // usually same as forecast zone
+  const localPlace1 = loc.city ? `${loc.city} ${loc.state}` : loc.label;
+  const product1 = p.event || p.headline || "Weather Alert";
+  const lat = loc.lat || p.areaDesc?.lat || '';
+  const lon = loc.lon || p.areaDesc?.lon || '';
+
+  // Fallback to event and city if missing lat/lon (should be present in loc object)
+  // URL-encode values (especially headline and place)
+  function encode(val) {
+    return encodeURIComponent(val || '');
+  }
+
+  let forecastUrl = '';
+  if (zoneCode && countyCode && lat && lon) {
+    forecastUrl = `https://forecast.weather.gov/showsigwx.php?warnzone=${encode(zoneCode)}&warncounty=${encode(countyCode)}&firewxzone=${encode(fireWxZone)}&local_place1=${encode(localPlace1)}&product1=${encode(product1)}&lat=${encode(lat)}&lon=${encode(lon)}`;
+  }
+
+  // If we have enough info for the friendly forecast page, use it, else fallback to alert JSON
+  const link = forecastUrl || p['@id'] || p.id || p.link || p.url || "";
+  const title = p.headline || p.event || "Weather Alert";
+
+  if (link) {
+    alertHtml = `<a class="alert-icon alert-clickable"
+      href="${escapeHtml(link)}"
+      target="_blank"
+      rel="noopener noreferrer"
+      title="${escapeHtml(title)}">⚠️</a>`;
+  } else {
+    alertHtml = `<span class="alert-icon"
+      title="${escapeHtml(title)}">⚠️</span>`;
+  }
+}
 
 let alertHtml = "";
 
