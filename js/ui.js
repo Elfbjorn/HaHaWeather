@@ -21,6 +21,7 @@ function escapeHtml(str) {
 }
 
 function codeFromZoneUrl(zoneUrl) {
+  console.log("[UI] codeFromZoneUrl: " + zoneUrl);
   if (!zoneUrl) return '';
   const parts = zoneUrl.split("/");
   const last = parts[parts.length-1];
