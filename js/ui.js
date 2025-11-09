@@ -98,32 +98,30 @@ function normalizeDailyMap(dailyData) {
  */
 function deriveDateKeys(locations) {
   const keySet = new Set();
-  const todayLocal = formatDateKey(new Date()); // Local YYYY-MM-DD
 
-  // Collect from dailyData if present
+  // gather keys from dailyData maps (preferred)
   for (const loc of locations) {
     const dm = normalizeDailyMap(loc && loc.dailyData);
-    if (dm) {
-      for (const k of Object.keys(dm)) {
-        keySet.add(formatDateKey(k)); // enforce local key space
-      }
+    if (dm && typeof dm === "object") {
+      for (const k of Object.keys(dm)) keySet.add(formatDateKey(k));
     }
   }
 
-  // Fallback: collect from periods if no daily keys
+  // fallback: derive from periods
   for (const loc of locations) {
     if (loc && Array.isArray(loc.periods)) {
       for (const p of loc.periods) {
-        const raw = p.startTime || p.start || p.date || new Date();
-        keySet.add(formatDateKey(raw));
+        const k = formatDateKey(p.startTime || p.start || p.date || new Date());
+        keySet.add(k);
       }
     }
   }
 
-  // Final: filter out past days + sort
+  // final filter: today and beyond only (string compare works for YYYY-MM-DD)
+  const todayKey = formatDateKey(new Date());
   const finalKeys = Array.from(keySet)
-    .filter(k => k >= todayLocal)
-    .sort();
+    .filter(k => k >= todayKey)
+    .sort((a, b) => a.localeCompare(b));
 
   console.log("[UI] FINAL DATE KEYS:", finalKeys);
   return finalKeys;

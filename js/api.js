@@ -98,38 +98,25 @@
     }
   }
 
-  function codeFromZoneUrl(zoneUrl) {
-    if (!zoneUrl) return null;
-    var parts = zoneUrl.split("/");
-    return parts[parts.length - 1] || null;
+function codeFromZoneUrl(zoneUrl) {
+  if (!zoneUrl) return null;
+  const parts = zoneUrl.split("/");
+  const last = parts[parts.length - 1];       // e.g., "WIZ064" or "C025"
+  const prev = parts[parts.length - 2];       // e.g., "WI"
+
+  // already a full zone like WIZ064 or MDC031
+  if (/^[A-Z]{3}\d{3}$/.test(last) || /^[A-Z]{2}[CZ]\d{3}$/.test(last)) {
+    return last;
   }
 
-  // ---------- Forecast ----------
-  // Returns { forecast, hourly, city, state, point }
-  async function fetchNWSForecast(lat, lon) {
-    var point = await fetchNWSPoint(lat, lon);
-
-    var forecastUrl = point.properties && point.properties.forecast;
-    var hourlyUrl   = point.properties && point.properties.forecastHourly;
-    if (!forecastUrl) throw new Error("NWS 'forecast' URL missing for " + lat + "," + lon);
-
-    var loc = extractCityStateFromPoint(point);
-    var forecast = await fetchJSON(forecastUrl, {}, 12000);
-
-    var hourly = null;
-    if (hourlyUrl) {
-      try { hourly = await fetchJSON(hourlyUrl, {}, 12000); }
-      catch (e) { console.warn("[api] hourly forecast failed:", e.message); }
-    }
-
-    return {
-      forecast: forecast,  // NWS daily periods
-      hourly: hourly,      // may be null
-      city: loc.city,
-      state: loc.state,
-      point: point
-    };
+  // county form ".../WI/C025"  -> "WIC025"
+  if (/^[A-Z]{2}$/.test(prev) && /^[C|Z]\d{3}$/.test(last)) {
+    return prev + last;
   }
+
+  return null;
+}
+
   window.fetchNWSForecast = fetchNWSForecast;
 
   // ---------- Alerts (zone-first, county fallback) ----------
@@ -138,67 +125,31 @@
   // ---------- Alerts (zone-first, county fallback) ----------
   // Returns array of GeoJSON features
 async function fetchNWSAlerts(lat, lon, { pointJson }) {
-  const alerts = [];
-
   try {
-    //
-    // 1. Best-first: point-based lookup (ALWAYS accurate to the user's exact spot)
-    //
-    try {
-      const j = await fetchJSON(
-        `https://api.weather.gov/alerts/active?point=${lat},${lon}`
-      );
-      if (j && Array.isArray(j.features)) {
-        alerts.push(...j.features);
-      }
-    } catch (e) {
-      console.warn("[api] point-based alerts failed:", e.message);
-    }
-
-    //
-    // 2. Optional: zone & county expansion (usually redundant after point=)
-    //
     const props = pointJson.properties || {};
     const zoneCode   = codeFromZoneUrl(props.forecastZone);
     const countyCode = codeFromZoneUrl(props.county);
 
+    let alerts = [];
+
     if (zoneCode) {
       try {
-        const jz = await fetchJSON(
-          `https://api.weather.gov/alerts/active?zone=${encodeURIComponent(zoneCode)}`
-        );
-        if (jz && Array.isArray(jz.features)) alerts.push(...jz.features);
-      } catch (e) {
-        console.warn("[api] zone alerts failed:", zoneCode, e.message);
-      }
+        const j = await fetchJSON(`https://api.weather.gov/alerts/active/zone/${encodeURIComponent(zoneCode)}`);
+        if (j && Array.isArray(j.features)) alerts = alerts.concat(j.features);
+      } catch (e) { console.warn("[api] zone alerts failed", zoneCode, e); }
     }
 
     if (countyCode) {
       try {
-        const jc = await fetchJSON(
-          `https://api.weather.gov/alerts/active?zone=${encodeURIComponent(countyCode)}`
-        );
-        if (jc && Array.isArray(jc.features)) alerts.push(...jc.features);
-      } catch (e) {
-        console.warn("[api] county alerts failed:", countyCode, e.message);
-      }
+        const j2 = await fetchJSON(`https://api.weather.gov/alerts/active/zone/${encodeURIComponent(countyCode)}`);
+        if (j2 && Array.isArray(j2.features)) alerts = alerts.concat(j2.features);
+      } catch (e) { console.warn("[api] county alerts failed", countyCode, e); }
     }
 
-  } catch (e) {
-    console.error("[api] fetchNWSAlerts ERROR:", e);
+    return alerts;
+  } catch (err) {
+    console.error("[api] fetchNWSAlerts ERROR:", err);
+    return [];
   }
-
-  // ✅ Remove duplicates by ID (happens because point + zone often overlap)
-  const seen = new Set();
-  return alerts.filter(a => {
-    const id = a.id || a.properties.id || JSON.stringify(a);
-    if (seen.has(id)) return false;
-    seen.add(id);
-    return true;
-  });
-}
-window.fetchNWSAlerts = fetchNWSAlerts;
-
-
 })(); // <--- THIS WAS MISSING!!!
 
