@@ -261,6 +261,9 @@ function renderWeatherTable(locationsInput) {
 	    forecastUrl = `https://forecast.weather.gov/showsigwx.php?warnzone=${encode(zoneCode)}&warncounty=${encode(countyCode)}&firewxzone=${encode(fireWxZone)}&local_place1=${encode(localPlace1)}&product1=${encode(product1).replace(/%20/g, '+')}&lat=${encode(lat)}&lon=${encode(lon)}`;
 	  }
 
+	  console.log("zoneCode:", zoneCode, "countyCode:", countyCode, "lat:", lat, "lon:", lon);
+	  console.log("Trying to build NWS page URL:", forecastUrl);
+
 	  // Prefer the forecast/alert page if possible, else fallback to JSON
 	  const link = forecastUrl || p['@id'] || p.id || p.link || p.url || "";
 	  const title = p.headline || p.event || "Weather Alert";
@@ -279,8 +282,6 @@ function renderWeatherTable(locationsInput) {
 	  }
 	}
 
-	  console.log("zoneCode:", zoneCode, "countyCode:", countyCode, "lat:", lat, "lon:", lon);
-	  console.log("Trying to build NWS page URL:", forecastUrl);
 
         const main = renderWeatherCell(day, period);
 	
