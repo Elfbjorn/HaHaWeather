@@ -100,31 +100,36 @@ function deriveDateKeys(locations) {
   const keySet = new Set();
   const todayLocal = formatDateKey(new Date()); // Local YYYY-MM-DD
 
-  // Pass 1: Use dailyData if present
+  // Collect from dailyData if present
   for (const loc of locations) {
     const dm = normalizeDailyMap(loc && loc.dailyData);
     if (dm) {
-      Object.keys(dm).forEach(k => keySet.add(k));
-    }
-  }
-
-  // Pass 2 (fallback): derive from periods only if needed
-  if (keySet.size === 0) {
-    for (const loc of locations) {
-      if (loc && Array.isArray(loc.periods)) {
-        for (const p of loc.periods) {
-          const k = formatDateKey(p.startTime || p.start || p.date || new Date());
-          keySet.add(k);
-        }
+      for (const k of Object.keys(dm)) {
+        keySet.add(formatDateKey(k)); // ensure consistently local
       }
     }
   }
 
-  // ✅ NOW filter out past days using local time reference
-  return Array.from(keySet)
+  // Fallback: collect from periods if dailyData not present
+  for (const loc of locations) {
+    if (loc && Array.isArray(loc.periods)) {
+      for (const p of loc.periods) {
+        const raw = p.startTime || p.start || p.date || new Date();
+        const k = formatDateKey(raw);
+        keySet.add(k);
+      }
+    }
+  }
+
+  // Final: Convert to array, filter to today+, sort
+  const finalKeys = Array.from(keySet)
     .filter(k => k >= todayLocal)
     .sort();
+
+  console.log("[UI] FINAL DATE KEYS:", finalKeys);
+  return finalKeys;
 }
+
 
 /* =========================
    Cell rendering
