@@ -240,44 +240,47 @@ function renderWeatherTable(locationsInput) {
         console.log(`[UI] Checking alerts for ${dateKey}, col ${col}:`, alertsForLoc.length, 'alerts');
         const alertForDay = alertsForLoc.find(a => alertAppliesOnDate(a, dateKey));
         
-let alertHtml = "";
+	let alertHtml = "";
+	
+	if (alertForDay && alertForDay.properties) {
+	  const p = alertForDay.properties;
+	
+	  // Build NWS rendered URL if possible
+	  const zoneCode = p.zoneId || p.zone || (p.geocode && p.geocode.UGC && p.geocode.UGC[0]) || '';
+	  const countyCode = p.county || (p.geocode && p.geocode.FIPS6 && p.geocode.FIPS6[0]) || '';
+	  const fireWxZone = zoneCode;
+	  const localPlace1 = (loc.city ? `${loc.city} ${loc.state}` : loc.label) || "";
+	  const product1 = (p.event || p.headline || "Weather Alert");
+	  const lat = loc.lat || (p.areaDesc && p.areaDesc.lat) || '';
+	  const lon = loc.lon || (p.areaDesc && p.areaDesc.lon) || '';
+	  function encode(val) { return encodeURIComponent(val || ''); }
+	
+	  let forecastUrl = '';
+	  if (zoneCode && countyCode && lat && lon) {
+	    // NWS expects spaces as %20 in local_place1, + in product1
+	    forecastUrl = `https://forecast.weather.gov/showsigwx.php?warnzone=${encode(zoneCode)}&warncounty=${encode(countyCode)}&firewxzone=${encode(fireWxZone)}&local_place1=${encode(localPlace1)}&product1=${encode(product1).replace(/%20/g, '+')}&lat=${encode(lat)}&lon=${encode(lon)}`;
+	  }
 
-if (alertForDay && alertForDay.properties) {
-  const p = alertForDay.properties;
+	  // Prefer the forecast/alert page if possible, else fallback to JSON
+	  const link = forecastUrl || p['@id'] || p.id || p.link || p.url || "";
+	  const title = p.headline || p.event || "Weather Alert";
 
-  // Build NWS rendered URL if possible
-  const zoneCode = p.zoneId || p.zone || (p.geocode && p.geocode.UGC && p.geocode.UGC[0]) || '';
-  const countyCode = p.county || (p.geocode && p.geocode.FIPS6 && p.geocode.FIPS6[0]) || '';
-  const fireWxZone = zoneCode;
-  const localPlace1 = (loc.city ? `${loc.city} ${loc.state}` : loc.label) || "";
-  const product1 = (p.event || p.headline || "Weather Alert");
-  const lat = loc.lat || (p.areaDesc && p.areaDesc.lat) || '';
-  const lon = loc.lon || (p.areaDesc && p.areaDesc.lon) || '';
-  function encode(val) { return encodeURIComponent(val || ''); }
+	  if (link) {
+	    alertHtml = `<a class="alert-icon alert-clickable"
+	      href="${escapeHtml(link)}"
+	      target="_blank"
+	      rel="noopener noreferrer"
+	      title="${escapeHtml(title)}">⚠️</a>`;
+	console.log("Warining URL: " + link);
+	  } else {
+	    alertHtml = `<span class="alert-icon"
+	      title="${escapeHtml(title)}">⚠️</span>`;
+	console.log("Warining URL: " + link);
+	  }
+	}
 
-  let forecastUrl = '';
-  if (zoneCode && countyCode && lat && lon) {
-    // NWS expects spaces as %20 in local_place1, + in product1
-    forecastUrl = `https://forecast.weather.gov/showsigwx.php?warnzone=${encode(zoneCode)}&warncounty=${encode(countyCode)}&firewxzone=${encode(fireWxZone)}&local_place1=${encode(localPlace1)}&product1=${encode(product1).replace(/%20/g, '+')}&lat=${encode(lat)}&lon=${encode(lon)}`;
-  }
-
-  // Prefer the forecast/alert page if possible, else fallback to JSON
-  const link = forecastUrl || p['@id'] || p.id || p.link || p.url || "";
-  const title = p.headline || p.event || "Weather Alert";
-
-  if (link) {
-    alertHtml = `<a class="alert-icon alert-clickable"
-      href="${escapeHtml(link)}"
-      target="_blank"
-      rel="noopener noreferrer"
-      title="${escapeHtml(title)}">⚠️</a>`;
-console.log("Warining URL: " + link);
-  } else {
-    alertHtml = `<span class="alert-icon"
-      title="${escapeHtml(title)}">⚠️</span>`;
-console.log("Warining URL: " + link);
-  }
-}
+	  console.log("zoneCode:", zoneCode, "countyCode:", countyCode, "lat:", lat, "lon:", lon);
+	  console.log("Trying to build NWS page URL:", forecastUrl);
 
         const main = renderWeatherCell(day, period);
 	
