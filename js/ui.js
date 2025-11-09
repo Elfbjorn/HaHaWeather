@@ -20,6 +20,16 @@ function escapeHtml(str) {
     .replace(/'/g, "&#039;");
 }
 
+function codeFromZoneUrl(zoneUrl) {
+  if (!zoneUrl) return '';
+  const parts = zoneUrl.split("/");
+  const last = parts[parts.length-1];
+  const prev = parts[parts.length-2];
+  if (/^[A-Z]{3}\d{3}$/.test(last) || /^[A-Z]{2}[CZ]\d{3}$/.test(last)) return last;
+  if (/^[A-Z]{2}$/.test(prev) && /^[C|Z]\d{3}$/.test(last)) return prev+last;
+  return '';
+}
+
 function pad2(n) { return String(n).padStart(2, "0"); }
 
 function formatDateKey(dateLike) {
@@ -247,7 +257,7 @@ function renderWeatherTable(locationsInput) {
 	
 	  // Build NWS rendered URL if possible
 	  const zoneCode = p.zoneId || p.zone || (p.geocode && p.geocode.UGC && p.geocode.UGC[0]) || '';
-	  const countyCode = p.county || (p.geocode && p.geocode.FIPS6 && p.geocode.FIPS6[0]) || '';
+	  const countyCode = codeFromZoneUrl(p.county) || (p.geocode && p.geocode.FIPS6 && p.geocode.FIPS6[0]) || '';
 	  const fireWxZone = zoneCode;
 	  const localPlace1 = (loc.city ? `${loc.city} ${loc.state}` : loc.label) || "";
 	  const product1 = (p.event || p.headline || "Weather Alert");
