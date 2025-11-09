@@ -35,6 +35,12 @@ function formatDateKey(dateLike) {
 }
 
 function formatDateLabel(dateLike) {
+  // If dateLike matches YYYY-MM-DD, parse as local date to avoid timezone bug
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateLike)) {
+    const [year, month, day] = dateLike.split('-').map(Number);
+    return new Date(year, month - 1, day)
+      .toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  }
   const d = new Date(dateLike);
   return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 }
