@@ -262,6 +262,7 @@ function renderWeatherTable(locationsInput) {
 	  	(p.geocode && p.geocode.FIPS6 && p.geocode.FIPS6[0])      // e.g., "TXC281"
 	  	|| codeFromZoneUrl(p.county)                              // fallback, if available
 	  	|| '';
+console.log("FRIGGIN COUNTY CODE: " + countyCode);
 	  const fireWxZone = zoneCode;
 	  const localPlace1 = (loc.city ? `${loc.city} ${loc.state}` : loc.label) || "";
 	  const product1 = (p.event || p.headline || "Weather Alert");
