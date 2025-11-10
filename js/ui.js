@@ -252,6 +252,8 @@ function renderWeatherTable(locationsInput) {
             ((p.geocode && Array.isArray(p.geocode.FIPS6) && p.geocode.FIPS6[0]) ? p.geocode.FIPS6[0] : 
               (typeof p.county === "string" && p.county.length > 0 ? codeFromZoneUrl(p.county) : ''));
 
+console.log("County code: " + countyCode);
+
           const fireWxZone = zoneCode;
           const localPlace1 = (loc.city ? `${loc.city} ${loc.state}` : loc.label) || "";
           const product1 = p.event || p.headline || "Weather Alert";
