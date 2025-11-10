@@ -197,7 +197,7 @@ function renderWeatherTable(locationsInput) {
 
     // Filter to only real locations
     const activeLocations = locations.filter(loc => loc && (loc.city || loc.state || loc.label));
-    
+
     // Build header for only real, defined locations
     for (let i = 0; i < activeLocations.length; i++) {
       const loc = activeLocations[i];
@@ -206,7 +206,7 @@ function renderWeatherTable(locationsInput) {
         : (loc.label || "");
       html += `<th class="loc-col loc-${i}">${escapeHtml(headerLabel)}</th>`;
     }
-   
+
     html += '</tr></thead><tbody>';
 
     // Build body rows
@@ -236,25 +236,25 @@ function renderWeatherTable(locationsInput) {
         const alertsForLoc = Array.isArray(loc.alerts) ? loc.alerts : [];
         console.log(`[UI] Checking alerts for ${dateKey}, col ${col}:`, alertsForLoc.length, 'alerts');
         const alertForDay = alertsForLoc.find(a => alertAppliesOnDate(a, dateKey));
-        
+
         let alertHtml = "";
 
         if (alertForDay && alertForDay.properties) {
           const p = alertForDay.properties;
 
-          // Use location metadata as the canonical source for county code and zone code.
-          // Fallback to alert props only if they are present and correct.
+          // UNFUCKING: Ensure location has countyFIPS and zoneCode set, using the point metadata if present in loc.point
+          if (!loc.countyFIPS && loc.point && loc.point.properties && loc.point.properties.county) {
+            loc.countyFIPS = codeFromZoneUrl(loc.point.properties.county);
+          }
+          if (!loc.zoneCode && loc.point && loc.point.properties && loc.point.properties.forecastZone) {
+            loc.zoneCode = codeFromZoneUrl(loc.point.properties.forecastZone);
+          }
 
-          // Always prefer location object for Lampasas (or other location geocode).
-          // Guaranteed to work for TX.
-loc.countyFIPS = codeFromZoneUrl(pointJson.properties.county);
-loc.zoneCode = codeFromZoneUrl(pointJson.properties.forecastZone);
+          // Always prefer location object for NWS codes
           const zoneCode = loc.zoneCode || p.zoneId || p.zone || (p.geocode && p.geocode.UGC && p.geocode.UGC[0]) || '';
-          const countyCode = loc.countyFIPS || 
-            ((p.geocode && Array.isArray(p.geocode.FIPS6) && p.geocode.FIPS6[0]) ? p.geocode.FIPS6[0] : 
+          const countyCode = loc.countyFIPS ||
+            ((p.geocode && Array.isArray(p.geocode.FIPS6) && p.geocode.FIPS6[0]) ? p.geocode.FIPS6[0] :
               (typeof p.county === "string" && p.county.length > 0 ? codeFromZoneUrl(p.county) : ''));
-
-console.log("County code: " + countyCode);
 
           const fireWxZone = zoneCode;
           const localPlace1 = (loc.city ? `${loc.city} ${loc.state}` : loc.label) || "";
@@ -262,7 +262,7 @@ console.log("County code: " + countyCode);
           const lat = loc.lat || '';
           const lon = loc.lon || '';
           function encode(val) { return encodeURIComponent(val || ''); }
-          
+
           let forecastUrl = '';
           if (zoneCode && countyCode && lat && lon) {
             forecastUrl = `https://forecast.weather.gov/showsigwx.php?warnzone=${encode(zoneCode)}&warncounty=${encode(countyCode)}&firewxzone=${encode(fireWxZone)}&local_place1=${encode(localPlace1)}&product1=${encode(product1).replace(/%20/g, '+')}&lat=${encode(lat)}&lon=${encode(lon)}`;
