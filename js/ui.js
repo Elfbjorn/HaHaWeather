@@ -256,9 +256,15 @@ function renderWeatherTable(locationsInput) {
           const p = alertForDay.properties;
 
           // Extract zone/county codes and location info
-          const zoneCode   = p.zoneId || p.zone || (p.geocode && p.geocode.UGC && p.geocode.UGC[0]) || '';
-          const countyCode = (p.geocode && p.geocode.FIPS6 && p.geocode.FIPS6[0]) || codeFromZoneUrl(p.county) || '';
+	  const zoneCode   = p.zoneId || p.zone || (p.geocode && p.geocode.UGC && p.geocode.UGC[0]) || '';
+	  let countyCode   = (p.geocode && p.geocode.FIPS6 && p.geocode.FIPS6[0]) || codeFromZoneUrl(p.county) || '';
+	  if (!countyCode) countyCode = zoneCode; // fallback!
+
+console.log("zoneCode:", zoneCode);
+console.log("countyCode before fallback:", (p.geocode && p.geocode.FIPS6 && p.geocode.FIPS6[0]), codeFromZoneUrl(p.county));
+console.log("countyCode used:", countyCode);
 console.log("THAT FRIGGIN CODE: " + countyCode);
+
           const fireWxZone = zoneCode;
           const localPlace1 = (loc.city ? `${loc.city} ${loc.state}` : loc.label) || "";
           const product1 = p.event || p.headline || "Weather Alert";
