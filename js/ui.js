@@ -247,6 +247,8 @@ function renderWeatherTable(locationsInput) {
 
           // Always prefer location object for Lampasas (or other location geocode).
           // Guaranteed to work for TX.
+loc.countyFIPS = codeFromZoneUrl(pointJson.properties.county);
+loc.zoneCode = codeFromZoneUrl(pointJson.properties.forecastZone);
           const zoneCode = loc.zoneCode || p.zoneId || p.zone || (p.geocode && p.geocode.UGC && p.geocode.UGC[0]) || '';
           const countyCode = loc.countyFIPS || 
             ((p.geocode && Array.isArray(p.geocode.FIPS6) && p.geocode.FIPS6[0]) ? p.geocode.FIPS6[0] : 
