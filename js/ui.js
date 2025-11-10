@@ -258,7 +258,10 @@ function renderWeatherTable(locationsInput) {
 	
 	  // Build NWS rendered URL if possible
 	  const zoneCode = p.zoneId || p.zone || (p.geocode && p.geocode.UGC && p.geocode.UGC[0]) || '';
-	  const countyCode = codeFromZoneUrl(p.county) || (p.geocode && p.geocode.FIPS6 && p.geocode.FIPS6[0]) || '';
+	  const countyCode =
+	  	(p.geocode && p.geocode.FIPS6 && p.geocode.FIPS6[0])      // e.g., "TXC281"
+	  	|| codeFromZoneUrl(p.county)                              // fallback, if available
+	  	|| '';
 	  const fireWxZone = zoneCode;
 	  const localPlace1 = (loc.city ? `${loc.city} ${loc.state}` : loc.label) || "";
 	  const product1 = (p.event || p.headline || "Weather Alert");
