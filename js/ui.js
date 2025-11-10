@@ -182,7 +182,6 @@ function renderWeatherCell(dayData, period) {
 /* =========================
    Table rendering (MAIN)
    ========================= */
-
 function renderWeatherTable(locationsInput) {
   try {
     const container = document.getElementById('forecast-container')
@@ -247,7 +246,7 @@ function renderWeatherTable(locationsInput) {
 
         // find an alert that applies for this dateKey
         const alertsForLoc = Array.isArray(loc.alerts) ? loc.alerts : [];
-        //console.log(`[UI] Checking alerts for ${dateKey}, col ${col}:`, alertsForLoc.length, 'alerts');
+        console.log(`[UI] Checking alerts for ${dateKey}, col ${col}:`, alertsForLoc.length, 'alerts');
         const alertForDay = alertsForLoc.find(a => alertAppliesOnDate(a, dateKey));
         
         let alertHtml = "";
@@ -255,49 +254,39 @@ function renderWeatherTable(locationsInput) {
         if (alertForDay && alertForDay.properties) {
           const p = alertForDay.properties;
 
-          // Extract zone/county codes and location info
-	  const zoneCode   = p.zoneId || p.zone || (p.geocode && p.geocode.UGC && p.geocode.UGC[0]) || '';
-	  let countyCode   = (p.geocode && p.geocode.FIPS6 && p.geocode.FIPS6[0]) || codeFromZoneUrl(p.county) || '';
-	  if (!countyCode) countyCode = zoneCode; // fallback!
-
-console.log("zoneCode:", zoneCode);
-console.log("countyCode before fallback:", (p.geocode && p.geocode.FIPS6 && p.geocode.FIPS6[0]), codeFromZoneUrl(p.county));
-console.log("countyCode used:", countyCode);
-console.log("THAT FRIGGIN CODE: " + countyCode);
+          // Zone/County code extraction
+          const zoneCode   = p.zoneId || p.zone || (p.geocode && p.geocode.UGC && p.geocode.UGC[0]) || (loc.zoneCode) || '';
+          let countyCode   = '';
+          if (p.geocode && Array.isArray(p.geocode.FIPS6) && p.geocode.FIPS6.length > 0) {
+            countyCode = p.geocode.FIPS6[0];
+          } else if (typeof p.county === "string" && p.county.length > 0) {
+            countyCode = codeFromZoneUrl(p.county);
+          } else if (loc.countyFIPS) {
+            countyCode = loc.countyFIPS;
+          }
+          if (!countyCode) countyCode = zoneCode;
 
           const fireWxZone = zoneCode;
           const localPlace1 = (loc.city ? `${loc.city} ${loc.state}` : loc.label) || "";
           const product1 = p.event || p.headline || "Weather Alert";
-          const lat = loc.lat || (p.areaDesc && p.areaDesc.lat) || '';
-          const lon = loc.lon || (p.areaDesc && p.areaDesc.lon) || '';
+          const lat = loc.lat || '';
+          const lon = loc.lon || '';
           function encode(val) { return encodeURIComponent(val || ''); }
-
-          // Debug: print extracted values
-          console.log("zoneCode:", zoneCode, "countyCode:", countyCode, "lat:", lat, "lon:", lon);
-
+          
           let forecastUrl = '';
           if (zoneCode && countyCode && lat && lon) {
-            // NWS expects spaces as %20 in local_place1, + in product1
             forecastUrl = `https://forecast.weather.gov/showsigwx.php?warnzone=${encode(zoneCode)}&warncounty=${encode(countyCode)}&firewxzone=${encode(fireWxZone)}&local_place1=${encode(localPlace1)}&product1=${encode(product1).replace(/%20/g, '+')}&lat=${encode(lat)}&lon=${encode(lon)}`;
             console.log("Forecast product URL:", forecastUrl);
           }
 
-          // Prefer the forecast/alert page if possible, else fallback to JSON
           const link = forecastUrl || p['@id'] || p.id || p.link || p.url || "";
           const title = p.headline || p.event || "Weather Alert";
 
-          if (link) {
-            alertHtml = `<a class="alert-icon alert-clickable"
-              href="${escapeHtml(link)}"
-              target="_blank"
-              rel="noopener noreferrer"
-              title="${escapeHtml(title)}">⚠️</a>`;
-            console.log("Warning URL: " + link);
-          } else {
-            alertHtml = `<span class="alert-icon"
-              title="${escapeHtml(title)}">⚠️</span>`;
-            console.log("Warning URL: " + link);
-          }
+          alertHtml = `<a class="alert-icon alert-clickable"
+            href="${escapeHtml(link)}"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="${escapeHtml(title)}">⚠️</a>`;
         }
 
         const main = renderWeatherCell(day, period);
