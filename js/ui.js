@@ -247,7 +247,7 @@ function renderWeatherTable(locationsInput) {
 
         // find an alert that applies for this dateKey
         const alertsForLoc = Array.isArray(loc.alerts) ? loc.alerts : [];
-        console.log(`[UI] Checking alerts for ${dateKey}, col ${col}:`, alertsForLoc.length, 'alerts');
+        //console.log(`[UI] Checking alerts for ${dateKey}, col ${col}:`, alertsForLoc.length, 'alerts');
         const alertForDay = alertsForLoc.find(a => alertAppliesOnDate(a, dateKey));
         
         let alertHtml = "";
