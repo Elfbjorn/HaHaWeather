@@ -69,6 +69,14 @@ async function setLocation(index, locationInfo) {
   // Fetch NWS forecast package
   const forecastData = await fetchNWSForecast(locationInfo.lat, locationInfo.lon);
 
+  // Extract codes from point data
+  let countyFIPS = "";
+  let zoneCode = "";
+  if (forecastData.point && forecastData.point.properties) {
+    countyFIPS = codeFromZoneUrl(forecastData.point.properties.county);
+    zoneCode = codeFromZoneUrl(forecastData.point.properties.forecastZone);
+  }
+
   const periods =
     forecastData.forecast &&
     forecastData.forecast.properties &&
@@ -98,7 +106,10 @@ async function setLocation(index, locationInfo) {
     forecastZone,
     alerts,
     dailyData,
-    index
+    index,
+    countyFIPS,         // <-- NEW PROPERTY
+    zoneCode,           // <-- NEW PROPERTY
+    point: forecastData.point // (OPTIONAL - for reference/debug)
   };
 
   console.log(`[APP] setLocation(${index}) stored location, rendering table`);
