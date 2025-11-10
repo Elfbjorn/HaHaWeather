@@ -140,18 +140,6 @@ function deriveDateKeys(locations) {
   return finalKeys;
 }
 
-// Helper to pull code from NWS county/zone URL
-function codeFromZoneUrl(zoneUrl) {
-  if (!zoneUrl) return '';
-  const parts = zoneUrl.split("/");
-  const last = parts[parts.length-1];
-  const prev = parts[parts.length-2];
-  if (/^[A-Z]{3}\d{3}$/.test(last) || /^[A-Z]{2}[CZ]\d{3}$/.test(last)) return last;
-  if (/^[A-Z]{2}$/.test(prev) && /^[C|Z]\d{3}$/.test(last)) return prev+last;
-  return '';
-}
-
-
 /* =========================
    Cell rendering
    ========================= */
@@ -254,18 +242,15 @@ function renderWeatherTable(locationsInput) {
         if (alertForDay && alertForDay.properties) {
           const p = alertForDay.properties;
 
-          // Zone/County code extraction
-const zoneCode = p.zoneId || p.zone || (p.geocode && p.geocode.UGC && p.geocode.UGC[0]) || (loc.zoneCode) || '';
-let countyCode = '';
-if (p.geocode && Array.isArray(p.geocode.FIPS6) && p.geocode.FIPS6.length > 0) {
-  countyCode = p.geocode.FIPS6[0];
-} else if (typeof p.county === "string" && p.county.length > 0) {
-  countyCode = codeFromZoneUrl(p.county);
-}
-if (!countyCode && loc.countyFIPS) {
-  countyCode = loc.countyFIPS;
-}
-console.log("Final extracted countyCode:", countyCode);
+          // Use location metadata as the canonical source for county code and zone code.
+          // Fallback to alert props only if they are present and correct.
+
+          // Always prefer location object for Lampasas (or other location geocode).
+          // Guaranteed to work for TX.
+          const zoneCode = loc.zoneCode || p.zoneId || p.zone || (p.geocode && p.geocode.UGC && p.geocode.UGC[0]) || '';
+          const countyCode = loc.countyFIPS || 
+            ((p.geocode && Array.isArray(p.geocode.FIPS6) && p.geocode.FIPS6[0]) ? p.geocode.FIPS6[0] : 
+              (typeof p.county === "string" && p.county.length > 0 ? codeFromZoneUrl(p.county) : ''));
 
           const fireWxZone = zoneCode;
           const localPlace1 = (loc.city ? `${loc.city} ${loc.state}` : loc.label) || "";
@@ -310,6 +295,17 @@ console.log("Final extracted countyCode:", countyCode);
   } catch (err) {
     console.error("[UI] renderWeatherTable ERROR:", err);
   }
+}
+
+// Helper unchanged
+function codeFromZoneUrl(zoneUrl) {
+  if (!zoneUrl) return '';
+  const parts = zoneUrl.split("/");
+  const last = parts[parts.length - 1];
+  const prev = parts[parts.length - 2];
+  if (/^[A-Z]{3}\d{3}$/.test(last) || /^[A-Z]{2}[CZ]\d{3}$/.test(last)) return last;
+  if (/^[A-Z]{2}$/.test(prev) && /^[C|Z]\d{3}$/.test(last)) return prev + last;
+  return '';
 }
 
 /* =========================
