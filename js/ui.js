@@ -20,17 +20,6 @@ function escapeHtml(str) {
     .replace(/'/g, "&#039;");
 }
 
-function codeFromZoneUrl(zoneUrl) {
-  console.log("[UI] codeFromZoneUrl: " + zoneUrl);
-  if (!zoneUrl) return '';
-  const parts = zoneUrl.split("/");
-  const last = parts[parts.length-1];
-  const prev = parts[parts.length-2];
-  if (/^[A-Z]{3}\d{3}$/.test(last) || /^[A-Z]{2}[CZ]\d{3}$/.test(last)) return last;
-  if (/^[A-Z]{2}$/.test(prev) && /^[C|Z]\d{3}$/.test(last)) return prev+last;
-  return '';
-}
-
 function pad2(n) { return String(n).padStart(2, "0"); }
 
 function formatDateKey(dateLike) {
@@ -151,6 +140,17 @@ function deriveDateKeys(locations) {
   return finalKeys;
 }
 
+// Helper to pull code from NWS county/zone URL
+function codeFromZoneUrl(zoneUrl) {
+  if (!zoneUrl) return '';
+  const parts = zoneUrl.split("/");
+  const last = parts[parts.length-1];
+  const prev = parts[parts.length-2];
+  if (/^[A-Z]{3}\d{3}$/.test(last) || /^[A-Z]{2}[CZ]\d{3}$/.test(last)) return last;
+  if (/^[A-Z]{2}$/.test(prev) && /^[C|Z]\d{3}$/.test(last)) return prev+last;
+  return '';
+}
+
 
 /* =========================
    Cell rendering
@@ -185,10 +185,10 @@ function renderWeatherCell(dayData, period) {
 
 function renderWeatherTable(locationsInput) {
   try {
-	const container = document.getElementById('forecast-container') 
-                || document.getElementById('weather-table-container') 
-                || document.querySelector('.forecast-container')
-                || document.querySelector('#forecast-table-container');
+    const container = document.getElementById('forecast-container')
+      || document.getElementById('weather-table-container')
+      || document.querySelector('.forecast-container')
+      || document.querySelector('#forecast-table-container');
     if (!container) {
       console.error("[UI] renderWeatherTable: container #weather-table-container not found.");
       return;
@@ -217,7 +217,6 @@ function renderWeatherTable(locationsInput) {
       const headerLabel = (loc.city && loc.state)
         ? `${loc.city}, ${loc.state}`
         : (loc.label || "");
-    
       html += `<th class="loc-col loc-${i}">${escapeHtml(headerLabel)}</th>`;
     }
    
@@ -248,58 +247,55 @@ function renderWeatherTable(locationsInput) {
 
         // find an alert that applies for this dateKey
         const alertsForLoc = Array.isArray(loc.alerts) ? loc.alerts : [];
-        // console.log(`[UI] Checking alerts for ${dateKey}, col ${col}:`, alertsForLoc.length, 'alerts');
+        console.log(`[UI] Checking alerts for ${dateKey}, col ${col}:`, alertsForLoc.length, 'alerts');
         const alertForDay = alertsForLoc.find(a => alertAppliesOnDate(a, dateKey));
         
-	let alertHtml = "";
-	
-	if (alertForDay && alertForDay.properties) {
-	  const p = alertForDay.properties;
-	
-	  // Build NWS rendered URL if possible
-	  const zoneCode = p.zoneId || p.zone || (p.geocode && p.geocode.UGC && p.geocode.UGC[0]) || '';
-	  const countyCode =
-	  	(p.geocode && p.geocode.FIPS6 && p.geocode.FIPS6[0])      // e.g., "TXC281"
-	  	|| codeFromZoneUrl(p.county)                              // fallback, if available
-	  	|| '';
-console.log("FRIGGIN COUNTY CODE: " + countyCode);
-	  const fireWxZone = zoneCode;
-	  const localPlace1 = (loc.city ? `${loc.city} ${loc.state}` : loc.label) || "";
-	  const product1 = (p.event || p.headline || "Weather Alert");
-	  const lat = loc.lat || (p.areaDesc && p.areaDesc.lat) || '';
-	  const lon = loc.lon || (p.areaDesc && p.areaDesc.lon) || '';
-	  function encode(val) { return encodeURIComponent(val || ''); }
-	
-	  let forecastUrl = '';
-	  if (zoneCode && countyCode && lat && lon) {
-	    // NWS expects spaces as %20 in local_place1, + in product1
-	    forecastUrl = `https://forecast.weather.gov/showsigwx.php?warnzone=${encode(zoneCode)}&warncounty=${encode(countyCode)}&firewxzone=${encode(fireWxZone)}&local_place1=${encode(localPlace1)}&product1=${encode(product1).replace(/%20/g, '+')}&lat=${encode(lat)}&lon=${encode(lon)}`;
-	  }
+        let alertHtml = "";
 
-	  console.log("zoneCode:", zoneCode, "countyCode:", countyCode, "lat:", lat, "lon:", lon);
-	  console.log("Trying to build NWS page URL:", forecastUrl);
+        if (alertForDay && alertForDay.properties) {
+          const p = alertForDay.properties;
 
-	  // Prefer the forecast/alert page if possible, else fallback to JSON
-	  const link = forecastUrl || p['@id'] || p.id || p.link || p.url || "";
-	  const title = p.headline || p.event || "Weather Alert";
+          // Extract zone/county codes and location info
+          const zoneCode   = p.zoneId || p.zone || (p.geocode && p.geocode.UGC && p.geocode.UGC[0]) || '';
+          const countyCode = (p.geocode && p.geocode.FIPS6 && p.geocode.FIPS6[0]) || codeFromZoneUrl(p.county) || '';
+console.log("THAT FRIGGIN CODE: " + countyCode);
+          const fireWxZone = zoneCode;
+          const localPlace1 = (loc.city ? `${loc.city} ${loc.state}` : loc.label) || "";
+          const product1 = p.event || p.headline || "Weather Alert";
+          const lat = loc.lat || (p.areaDesc && p.areaDesc.lat) || '';
+          const lon = loc.lon || (p.areaDesc && p.areaDesc.lon) || '';
+          function encode(val) { return encodeURIComponent(val || ''); }
 
-	  if (link) {
-	    alertHtml = `<a class="alert-icon alert-clickable"
-	      href="${escapeHtml(link)}"
-	      target="_blank"
-	      rel="noopener noreferrer"
-	      title="${escapeHtml(title)}">⚠️</a>`;
-	console.log("Warining URL: " + link);
-	  } else {
-	    alertHtml = `<span class="alert-icon"
-	      title="${escapeHtml(title)}">⚠️</span>`;
-	console.log("Warining URL: " + link);
-	  }
-	}
+          // Debug: print extracted values
+          console.log("zoneCode:", zoneCode, "countyCode:", countyCode, "lat:", lat, "lon:", lon);
 
+          let forecastUrl = '';
+          if (zoneCode && countyCode && lat && lon) {
+            // NWS expects spaces as %20 in local_place1, + in product1
+            forecastUrl = `https://forecast.weather.gov/showsigwx.php?warnzone=${encode(zoneCode)}&warncounty=${encode(countyCode)}&firewxzone=${encode(fireWxZone)}&local_place1=${encode(localPlace1)}&product1=${encode(product1).replace(/%20/g, '+')}&lat=${encode(lat)}&lon=${encode(lon)}`;
+            console.log("Forecast product URL:", forecastUrl);
+          }
+
+          // Prefer the forecast/alert page if possible, else fallback to JSON
+          const link = forecastUrl || p['@id'] || p.id || p.link || p.url || "";
+          const title = p.headline || p.event || "Weather Alert";
+
+          if (link) {
+            alertHtml = `<a class="alert-icon alert-clickable"
+              href="${escapeHtml(link)}"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="${escapeHtml(title)}">⚠️</a>`;
+            console.log("Warning URL: " + link);
+          } else {
+            alertHtml = `<span class="alert-icon"
+              title="${escapeHtml(title)}">⚠️</span>`;
+            console.log("Warning URL: " + link);
+          }
+        }
 
         const main = renderWeatherCell(day, period);
-	
+
         // Place alert ABOVE the icon+temps block
         html += `<td class="forecast-cell">
           <div class="cell-stack">
@@ -307,7 +303,6 @@ console.log("FRIGGIN COUNTY CODE: " + countyCode);
             ${main}
           </div>
         </td>`;
-
       }
 
       html += '</tr>';
