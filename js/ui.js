@@ -255,16 +255,17 @@ function renderWeatherTable(locationsInput) {
           const p = alertForDay.properties;
 
           // Zone/County code extraction
-          const zoneCode   = p.zoneId || p.zone || (p.geocode && p.geocode.UGC && p.geocode.UGC[0]) || (loc.zoneCode) || '';
-          let countyCode   = '';
-          if (p.geocode && Array.isArray(p.geocode.FIPS6) && p.geocode.FIPS6.length > 0) {
-            countyCode = p.geocode.FIPS6[0];
-          } else if (typeof p.county === "string" && p.county.length > 0) {
-            countyCode = codeFromZoneUrl(p.county);
-          } else if (loc.countyFIPS) {
-            countyCode = loc.countyFIPS;
-          }
-          if (!countyCode) countyCode = zoneCode;
+const zoneCode = p.zoneId || p.zone || (p.geocode && p.geocode.UGC && p.geocode.UGC[0]) || (loc.zoneCode) || '';
+let countyCode = '';
+if (p.geocode && Array.isArray(p.geocode.FIPS6) && p.geocode.FIPS6.length > 0) {
+  countyCode = p.geocode.FIPS6[0];
+} else if (typeof p.county === "string" && p.county.length > 0) {
+  countyCode = codeFromZoneUrl(p.county);
+}
+if (!countyCode && loc.countyFIPS) {
+  countyCode = loc.countyFIPS;
+}
+console.log("Final extracted countyCode:", countyCode);
 
           const fireWxZone = zoneCode;
           const localPlace1 = (loc.city ? `${loc.city} ${loc.state}` : loc.label) || "";
