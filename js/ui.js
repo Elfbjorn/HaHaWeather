@@ -250,6 +250,9 @@ function renderWeatherTable(locationsInput) {
             loc.zoneCode = codeFromZoneUrl(loc.point.properties.forecastZone);
           }
 
+console.log("zoneCode: " + loc.zoneCode);
+console.log("CountyFIPs: " + loc.countyFIPS);
+
           // Always prefer location object for NWS codes
           const zoneCode = loc.zoneCode || p.zoneId || p.zone || (p.geocode && p.geocode.UGC && p.geocode.UGC[0]) || '';
           const countyCode = loc.countyFIPS ||
